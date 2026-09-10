@@ -28,7 +28,7 @@ disagree with them and still have built the right thing.
 
 Something like:
 
-> Read `docs/blueprints/` and build the service it specifies. Use <your language>.
+> Read this directory and build the service it specifies. Use <your language>.
 > `02-specification.md` is normative — where it says MUST, that is not a suggestion.
 > Work test-first against `03-acceptance-criteria.md`; every criterion should map to a
 > test that fails before you write the code that satisfies it. `05` describes a prior
