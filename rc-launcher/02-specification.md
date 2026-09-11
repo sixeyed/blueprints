@@ -326,6 +326,18 @@ entitlement, a trusted directory — MUST be satisfiable through the attached te
 *If satisfying them requires physical or separate access to the machine, the launcher
 has not removed the need to be at your desk; it has moved it.*
 
+**10.3.1** Where the driving tool holds its own credentials, those credentials MUST be
+readable by the non-interactive session the launcher creates. *An operating system
+keyring is typically unlocked by a desktop login and unavailable to a remote shell, so a
+tool signed in at the machine can report that it is not signed in when the launcher runs
+it — and signing in again at the machine will not fix it.* An implementation MUST NOT
+treat "signed in at the machine" as evidence that the launcher can authenticate.
+
+**10.3.2** Where credentials are renewed automatically, the renewal MUST be persisted to
+the store the launching session reads. *Otherwise the launcher works until the first
+expiry and then fails exactly as it did before, which reads as a new fault rather than
+the same one.*
+
 **10.4** Absolute URLs, including any identity-provider callback, MUST be built from
 configured public URL rather than from the incoming request. *Behind a proxy that
 terminates encryption, the request arrives looking unencrypted, and a URL derived from

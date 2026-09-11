@@ -237,6 +237,58 @@ tell the operator to go and fix it on the machine. Do not. The attached terminal
 you satisfy it, from wherever you are — and if it were not, the launcher would have moved
 the need to be at your desk rather than removed it.
 
+### Credentials the launching session cannot read
+
+The sharpest version of the prerequisite above, and the one that cost the most time,
+because it does not look like a credential problem at all.
+
+The driving tool stored its credentials in the operating system's user keyring. A
+desktop session unlocks that keyring at login; **a non-interactive remote shell does
+not**, and cannot. So the tool, run over the launcher's connection, found no
+credentials and reported that the operator was not signed in — on machines where they
+demonstrably were, and where the same command worked perfectly when typed at the
+machine itself.
+
+Three things made it expensive to diagnose:
+
+- **The message named the wrong cause.** "Not signed in" sends you to sign in again,
+  which writes to the keyring again, which the remote shell still cannot read. The
+  loop is stable and gives no new information.
+- **One machine worked.** Its platform had no keyring and used a file, so the same
+  build behaved differently on different machines for reasons nothing in the tool
+  surfaced.
+- **The fix had already happened by accident.** Signing in *through the attached
+  terminal* — a remote shell, where the keyring is unavailable — made the tool fall
+  back to a file, and that file is readable by every later session. The machine that
+  worked had been fixed this way without anyone noticing.
+
+So the rule is: **the credential must live in a store the launching session can read**,
+and satisfying that is the operator signing in through the attached terminal, not at
+the machine. Keyring and file are independent stores that do not feed each other;
+signing in at the desktop is invisible to the launcher, and the reverse is also true.
+
+Two things worth verifying rather than assuming, because we assumed both and were
+wrong once each:
+
+- **That refreshes persist to the same store.** A short-lived access token is renewed
+  from a longer-lived one. If the renewal is written back to the keyring while the
+  session reads the file, everything works until the first expiry and then fails
+  identically to the original bug. Force an expiry and prove a real call still
+  succeeds afterwards.
+- **That a headless token carries the scope you need.** The obvious workaround is a
+  long-lived token in the environment, but a token minted for headless use may carry
+  only an inference scope, while registering a remote session is a *different* scope.
+  A token that can run a prompt and cannot create a session looks like a working
+  credential and is not one.
+
+*When testing any of this, prove the instrument works before trusting its verdict:
+verify the probe command succeeds on a valid credential first. Three consecutive
+diagnoses here were wrong because the probe never ran — a status subcommand that
+never refreshes, a timeout utility absent on the platform, and a command that read
+the same standard input the test script was being fed through — and each time the
+script reported a confident conclusion about authentication instead of noticing it
+had measured nothing.*
+
 ## The interface
 
 One page.

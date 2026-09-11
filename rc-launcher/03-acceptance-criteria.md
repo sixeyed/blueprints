@@ -195,6 +195,15 @@ confidently wrong.
       is visible in the interface when active.
 - [ ] **10.4** Absolute URLs are built from configuration. *Send a request with a
       misleading host header and confirm generated URLs ignore it.*
+- [ ] **10.5** A machine whose driving tool is signed in **only** at its desktop is
+      reported as not ready, and the operator can make it ready through the attached
+      terminal without touching the machine. *This is the keyring case: sign in at the
+      desktop, confirm the launcher still cannot launch, then sign in through the
+      terminal and confirm it can.*
+- [ ] **10.6** After the driving tool's short-lived credential expires, a launch still
+      succeeds without any operator action. *Force the expiry rather than waiting for
+      it, and assert on a real call — a status subcommand that reports local state
+      without renewing anything will pass this while the system is broken.*
 
 ---
 
