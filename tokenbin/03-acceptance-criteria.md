@@ -103,6 +103,11 @@ stopped being identical — that is the test working.
       remaining budget.
 - [ ] **6.2** A denied read writes a record, including for names that do not exist.
 - [ ] **6.3** Create, approve, revoke, rotate and delete each write a record.
+- [ ] **6.4** A read records the connection peer and any claimed forwarded address as
+      separate fields. *Send a forwarded-for header with an invented address: it appears
+      as the claim and never as the peer.*
+- [ ] **6.5** A request with no forwarded header records the peer and an empty claim.
+- [ ] **6.6** A forwarded chain of several addresses is stored whole.
 
 ## 7. The read response
 

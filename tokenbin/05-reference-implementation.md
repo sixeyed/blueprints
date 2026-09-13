@@ -165,6 +165,17 @@ one. A group operation that matches on it arms everything the owner has, from on
 meant to arm four things. The guard is one line and it needs its own test, because every
 other grouping test passes without it.
 
+### Configuration that is not consulted by anything
+
+The server was started with its proxy-header handling enabled and set to trust any
+peer — which read as an obvious weakness, and was flagged as one repeatedly. It turned
+out that nothing consulted it: the client address was read straight from the header by
+application code, and no code path used the rewritten scheme or host. Tightening the
+setting, the fix proposed several times, would have changed nothing at all.
+
+Before hardening a setting, find what reads it. A security control nothing consults is
+worse than its absence, because it answers "is this handled?" with a yes.
+
 ### Test invocation
 
 Tests passed when run as a module and failed when run as a bare command, because only

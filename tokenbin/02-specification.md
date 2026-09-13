@@ -57,11 +57,30 @@ rather than an email address, and treat the address as display-only.
 | `timestamp` | |
 | `name` | The name requested, even where no such secret exists |
 | `actor` | Owner identifier, or an anonymous marker for reads |
-| `source` | Client address |
+| `peer` | The other end of the connection. Never forgeable |
+| `forwarded` | Any claimed forwarded-for value, whole. Trustworthy only per §1.2.2 |
 | `event` | `create`, `approve`, `revoke`, `rotate`, `delete`, `read_ok`, `read_denied` |
 | `reads_remaining` | Where applicable |
 
 **1.2.1** An audit record MUST NOT contain a secret's value, in any field, ever.
+
+**1.2.2** The connection peer and any claimed forwarded address MUST be recorded as
+separate fields, and a claim MUST NOT be stored as though it were the peer.
+
+*A forwarded-for header is set by the caller. It is trustworthy only when the peer is a
+proxy you run — one that discards any inbound copy — and worthless otherwise. Folding
+the two into a single "client address" produces rows that look like evidence and are
+not, with nothing in the row to say which kind it is. Keeping them apart makes the trail
+honest with no configuration: the un-forgeable fact is always present, and a claim is
+visibly a claim.*
+
+*This is preferable to configuring a list of trusted proxy addresses. Such a list is
+correct when written and silently degrades when the proxy moves; recording both facts
+cannot rot, and stores strictly more.*
+
+**1.2.3** The forwarded value SHOULD be recorded whole rather than reduced to one entry.
+*The chain is the useful part, and truncating it discards the evidence of who added
+what.*
 
 ---
 
@@ -279,9 +298,14 @@ from configured public URL, not from the incoming request. *Behind a TLS-termina
 proxy the request appears as plain HTTP, and a callback derived from it will be rejected
 as an unregistered redirect.*
 
-**8.3** Where the service trusts forwarded-client-address headers, it MUST trust them
-only from known proxy addresses. *Trusting them from anywhere lets a caller forge the
-address the rate limiter keys on, defeating §4.4.*
+**8.3** The service SHOULD NOT need to trust forwarded-client-address headers at all.
+Nothing in this specification depends on the client's address: §4.4 forbids keying the
+limiter on it, and §1.2.2 records it as a claim rather than a fact.
+
+*Check for framework settings that enable such trust by default, and remove them if
+nothing reads what they produce. Configuration that appears to be a security control,
+and is not consulted by anything, is worse than none — it answers the question "is this
+handled?" with a yes.*
 
 **8.4** Where storage is a single-writer embedded database, the deployment MUST run
 exactly one instance. *Two instances race on the store, and each maintains its own
