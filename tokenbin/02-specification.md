@@ -20,21 +20,32 @@ Nothing here names a language, framework, database or identity provider.
 | `read_count` | integer | Lifetime successful reads. Display only |
 | `last_read` | timestamp | Display only |
 
-**1.1.1** `name` MUST match `[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?` — lowercase
-alphanumerics and hyphens, 1–64 characters, no leading or trailing hyphen. The name is
-the URL, so it MUST NOT require escaping or normalisation.
+**1.1.1** `name` MUST match `[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62}[A-Za-z0-9_])?` —
+letters, digits, underscores and hyphens, 1–64 characters, no leading or trailing
+hyphen. The name is the URL, so it MUST NOT require escaping or normalisation.
 
-**1.1.2** Names MUST be unique across the whole instance. A caller attempting to create
+*Underscores and uppercase are permitted deliberately: the set is wide enough to hold a
+valid environment variable name, because a secret is most often named for the variable
+it will be assigned to — `HOLMES_OIDC_CLIENT_SECRET`. Restricting to lowercase forces a
+mapping between the name in the store and the name in the script, which is a small,
+permanent source of confusion.*
+
+**1.1.2** Names MUST be case-sensitive, matching environment variable semantics.
+Implementers should note the consequence: a mistyped case produces the uniform denial of
+§4, which is indistinguishable from a closed window. This is the correct behaviour and
+it will occasionally confuse someone.
+
+**1.1.3** Names MUST be unique across the whole instance. A caller attempting to create
 an existing name MUST be refused. Implementers SHOULD note that this leaks the existence
 of another user's name; per-owner namespaces avoid it at the cost of putting an owner
 identifier in every URL. Global uniqueness is the recommended trade.
 
-**1.1.3** There MUST NOT be an expiry date, a time-to-live, or any garbage collection of
+**1.1.4** There MUST NOT be an expiry date, a time-to-live, or any garbage collection of
 secrets. A secret lives until deleted. The approval window is the only lifecycle. *A
 store that expires or reaps rarely-read entries will silently destroy the credential you
 depend on least often.*
 
-**1.1.4** `owner` MUST be a stable identifier that cannot be reassigned to a different
+**1.1.5** `owner` MUST be a stable identifier that cannot be reassigned to a different
 person. Where the identity system offers both, use the immutable subject identifier
 rather than an email address, and treat the address as display-only.
 
