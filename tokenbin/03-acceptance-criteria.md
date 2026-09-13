@@ -50,10 +50,18 @@ stopped being identical — that is the test working.
 - [ ] **2.4** No denial carries a response body.
 - [ ] **2.5** No denial carries an authentication-challenge header.
 - [ ] **2.6** A failed decryption does not consume budget.
-- [ ] **2.7** After a threshold of denials from one source, further attempts receive a
-      distinct rate-limit response.
-- [ ] **2.8** Successful reads are never rate-limited. *Approve a budget larger than the
-      denial threshold and read it out completely.*
+- [ ] **2.7** After a threshold of denials, further attempts receive a distinct
+      rate-limit response.
+- [ ] **2.8** The threshold is global. *Send each denial from a different forwarded
+      client address; the limit still trips. A per-client limiter passes every other
+      criterion here and is free to evade.*
+- [ ] **2.9** Denials for different names share the one counter. *Enumeration walks
+      names, not addresses.*
+- [ ] **2.10** A tripped limit still serves an armed token. *Otherwise an
+      unauthenticated caller can halt every script by asking for names that do not
+      exist.*
+- [ ] **2.11** Successful reads never count toward the limit. *Approve a budget larger
+      than the denial threshold and read it out completely.*
 
 ## 3. Isolation between owners
 

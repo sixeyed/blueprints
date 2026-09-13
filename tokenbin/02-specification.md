@@ -158,10 +158,22 @@ code, the same empty body, and the same headers. This applies to all of:
 **4.3** Denials MUST NOT vary in timing in a way that reveals existence, MUST NOT
 include a body, and MUST NOT include an authentication-challenge header.
 
-**4.4** Repeated denials from one source MUST be rate-limited. A simple threshold — N
-denials per source per interval, then a distinct rate-limit status — is sufficient. The
-limiter exists to make name-guessing expensive, not to be exact; it MAY be in-memory and
-MAY reset on restart. Successful reads MUST NOT be limited.
+**4.4** Denials MUST be rate-limited. A single global threshold — N denials per
+interval across all callers, then a distinct rate-limit status — is sufficient.
+
+The limiter MUST NOT be keyed on the client address. *Doing so means keying on a
+forwarded-address header, which anything able to reach the service without passing the
+proxy can set to a fresh value per request — making a per-client limit free to evade
+while appearing to work. The threat is enumeration, which is a property of the total
+rate of denials rather than of any one source, so a single counter measures the right
+thing and has no forgeable input.*
+
+**4.5** A tripped limit MUST NOT affect successful reads. *Anyone can trip a global
+counter by asking for names that do not exist; if that also blocked genuine reads, an
+unauthenticated caller could halt every script depending on the service.*
+
+**4.6** The limiter MAY be in-memory and MAY reset on restart — it exists to make
+guessing slow, not to be exact.
 
 *Without 4.1 and 4.4 the read endpoint is an oracle: an attacker learns which names
 exist by probing, and a name is often a strong hint about what the credential unlocks.*
