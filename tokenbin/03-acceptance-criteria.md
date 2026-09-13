@@ -124,16 +124,38 @@ stopped being identical — that is the test working.
       happened. *Assert on the message reaching the page, not just on the resulting
       state.*
 
-## 9. Operational
+## 9. Grouping (if implemented)
 
-- [ ] **9.1** The service refuses to start on invalid configuration, rather than failing
+- [ ] **9.1** A secret created without a group is ungrouped, and behaves exactly as one
+      created before grouping existed.
+- [ ] **9.2** Approving a group arms every member.
+- [ ] **9.3** Approving a group leaves other groups, and every ungrouped secret,
+      untouched.
+- [ ] **9.4** Each member gets its own budget. *Approve a group with a budget of one and
+      read two different members; both succeed.*
+- [ ] **9.5** Revoking a group closes every member and nothing else.
+- [ ] **9.6** Approving the empty group affects nothing. *This is the one that bites: if
+      the empty value matches, one click arms every ungrouped secret the owner has.*
+- [ ] **9.7** A group containing none of the caller's secrets is indistinguishable from
+      one that does not exist.
+- [ ] **9.8** Two owners using the same group name have separate groups, and neither
+      can approve, revoke or rename the other's.
+- [ ] **9.9** An invalid approval window leaves the whole group closed — no partial
+      application.
+- [ ] **9.10** Renaming a group moves every member the caller owns, and none they do
+      not.
+- [ ] **9.11** A grouped secret is read at the same URL as any other.
+
+## 10. Operational
+
+- [ ] **10.1** The service refuses to start on invalid configuration, rather than failing
       later at the point of use.
-- [ ] **9.2** The health check reveals nothing about stored content.
-- [ ] **9.3** Restarting the service preserves all secrets and their armed state.
-- [ ] **9.4** Absolute URLs are built from configuration, not from the incoming request.
+- [ ] **10.2** The health check reveals nothing about stored content.
+- [ ] **10.3** Restarting the service preserves all secrets and their armed state.
+- [ ] **10.4** Absolute URLs are built from configuration, not from the incoming request.
       *Send a request with a misleading host header and confirm generated URLs ignore
       it.*
-- [ ] **9.5** Secrets survive an upgrade of the service. *Write with one version, read
+- [ ] **10.5** Secrets survive an upgrade of the service. *Write with one version, read
       with the next.*
 
 ---

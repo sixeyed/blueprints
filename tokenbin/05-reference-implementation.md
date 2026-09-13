@@ -139,6 +139,32 @@ where a builder uses the containerd image store, even a single-platform push is 
 an index, which older manifest tooling refuses to nest — the newer `imagetools`-style
 join handles it.
 
+### The first schema change will not reach the live database
+
+The schema was created with a conditional "create table if not exists". That is correct
+for a fresh start and does nothing on a database that already exists — so the first time
+a column is added, the feature works perfectly in development and silently does nothing
+in production, against the only data anyone cares about.
+
+Add an explicit migration step before you need one: read the table's current columns and
+add what is missing, additively and idempotently.
+
+There is a second-order bite. Index creation lived in the same schema script, and the
+new index named the new column. On an existing database that runs *before* the migration
+adds it, so the index creation fails — on exactly the databases the migration exists to
+fix. Apply indexes after migrations, not with the tables.
+
+Test it against the schema the running service actually has, extracted from it, rather
+than a hand-written approximation. The approximation is written from the same
+understanding that produced the bug.
+
+### The empty group is not a group
+
+Grouping stores a plain string on each secret, and ungrouped secrets share the empty
+one. A group operation that matches on it arms everything the owner has, from one click
+meant to arm four things. The guard is one line and it needs its own test, because every
+other grouping test passes without it.
+
 ### Test invocation
 
 Tests passed when run as a module and failed when run as a bare command, because only

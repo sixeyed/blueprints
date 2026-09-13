@@ -130,6 +130,25 @@ Note that every one of these returns the response body verbatim. That is why
 [§3.3](02-specification.md#3-interface) forbids any envelope: a JSON wrapper would mean
 every caller in every language needs a parser, and `$(curl -s ...)` would stop working.
 
+## Groups
+
+When a run needs several secrets, approving them one at a time is tedious — and the
+tedium is the risk, because it pushes people toward long windows so they do not have to
+come back. Put those secrets in a group and open them together:
+
+```console
+$ ./secrets-needed deploy.sh
+PHOTO_TOKEN
+R2_BUCKET_KEY
+REGISTRY_PASSWORD
+```
+
+One click on the group, and all three are armed for the same window with the same budget
+each. Each keeps its own allowance, so a retry on one does not spend another's.
+
+Name groups after the *task*, not the system — `deploy-pipeline`, `nightly-backup` —
+because the question you are answering at approval time is "what am I about to run".
+
 ## Choosing a window
 
 | Situation | Suggested |

@@ -19,6 +19,7 @@ Nothing here names a language, framework, database or identity provider.
 | `approved_reads` | integer | Reads remaining in the current window. `0` means closed |
 | `read_count` | integer | Lifetime successful reads. Display only |
 | `last_read` | timestamp | Display only |
+| `group` | string | Optional. Empty means ungrouped. See §9 |
 
 **1.1.1** `name` MUST match `[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,62}[A-Za-z0-9_])?` —
 letters, digits, underscores and hyphens, 1–64 characters, no leading or trailing
@@ -111,6 +112,10 @@ denial (§4) and MUST NOT consume budget.
 | Revoke | owner of that secret | |
 | Rotate value | owner of that secret | |
 | Delete | owner of that secret | |
+| Set a secret's group | owner of that secret | §9 |
+| Approve a group | owner | Applies to every member they own |
+| Revoke a group | owner | |
+| Rename a group | owner | Moves every member they own |
 | Health check | none | MUST disclose nothing about content |
 
 **3.1** There MUST be exactly one operation that returns a secret's value. *Every
@@ -281,3 +286,36 @@ address the rate limiter keys on, defeating §4.4.*
 **8.4** Where storage is a single-writer embedded database, the deployment MUST run
 exactly one instance. *Two instances race on the store, and each maintains its own
 in-memory rate limiter, silently multiplying the threshold.*
+
+
+---
+
+## 9. Grouping (optional)
+
+Secrets that are used together — the four a deploy needs — are tedious to approve one
+at a time, and the tedium is itself a risk: it pushes people toward long windows so they
+do not have to come back.
+
+**9.1** A secret MAY belong to a group. Group membership is optional, and a secret with
+no group MUST behave exactly as it did before grouping existed.
+
+**9.2** A group MUST NOT appear in the read URL. Names remain globally unique and the
+read operation is unchanged. *A group is an organisational convenience, not part of a
+secret's identity; putting it in the URL would make regrouping a breaking change for
+every caller.*
+
+**9.3** Approving a group MUST give each member its own window and its own budget, with
+the same settings applied to each. Budgets MUST NOT be pooled across a group. *Pooling
+means one member's reads silently consume another's, and a retry on one secret can
+exhaust the allowance for a secret that has not been read at all.*
+
+**9.4** Group operations MUST be owner-scoped exactly as single-secret operations are.
+Two owners using the same group name have two separate groups. A group containing none
+of the caller's secrets MUST be indistinguishable from one that does not exist.
+
+**9.5** The empty group MUST NOT be treated as a group. *Ungrouped secrets share the
+empty value; a group operation that matched on it would arm everything the owner has —
+the exact opposite of a deliberate, scoped approval.*
+
+**9.6** Membership SHOULD be changeable after creation, and renaming a group SHOULD move
+its members. *Grouping is most useful applied to secrets that already exist.*
