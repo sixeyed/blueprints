@@ -12,7 +12,7 @@ Nothing here names a language, framework, database or identity provider.
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | Unique. Forms the read URL |
-| `value` | string | The credential. MUST be encrypted at rest |
+| `value` | string | The credential. May be multi-line. MUST be encrypted at rest |
 | `owner` | string | Stable identifier of the creator |
 | `created` | timestamp | |
 | `approved_until` | timestamp | `0`/null means closed |
@@ -36,17 +36,31 @@ Implementers should note the consequence: a mistyped case produces the uniform d
 §4, which is indistinguishable from a closed window. This is the correct behaviour and
 it will occasionally confuse someone.
 
-**1.1.3** Names MUST be unique across the whole instance. A caller attempting to create
+**1.1.3** A value MAY span multiple lines — a private key, a certificate, a
+service-account document. Line endings MUST be normalised to LF on the way in, and
+nothing else about the value may be altered: leading and trailing whitespace, blank
+lines and a final newline MUST all survive.
+
+*Browsers submit multi-line form fields with CRLF endings whatever was pasted, so a key
+pasted into a form arrives different from the same key read off disk. An SSH private key
+with CRLF endings is rejected with a format error that mentions nothing about line
+endings. Normalise once, where no path into storage can skip it — leaving it to each
+caller means debugging it from the far end of a deploy script.*
+
+*The trailing newline is the reason not to simply strip whitespace: OpenSSH rejects a
+private key that lacks one.*
+
+**1.1.4** Names MUST be unique across the whole instance. A caller attempting to create
 an existing name MUST be refused. Implementers SHOULD note that this leaks the existence
 of another user's name; per-owner namespaces avoid it at the cost of putting an owner
 identifier in every URL. Global uniqueness is the recommended trade.
 
-**1.1.4** There MUST NOT be an expiry date, a time-to-live, or any garbage collection of
+**1.1.5** There MUST NOT be an expiry date, a time-to-live, or any garbage collection of
 secrets. A secret lives until deleted. The approval window is the only lifecycle. *A
 store that expires or reaps rarely-read entries will silently destroy the credential you
 depend on least often.*
 
-**1.1.5** `owner` MUST be a stable identifier that cannot be reassigned to a different
+**1.1.6** `owner` MUST be a stable identifier that cannot be reassigned to a different
 person. Where the identity system offers both, use the immutable subject identifier
 rather than an email address, and treat the address as display-only.
 

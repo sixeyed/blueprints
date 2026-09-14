@@ -114,7 +114,12 @@ stopped being identical — that is the test working.
 - [ ] **7.1** The body is exactly the value — no envelope, no quotes, no added
       whitespace or newline. *Assert byte equality, not "contains".*
 - [ ] **7.2** The content type is plain text.
-- [ ] **7.3** No-store cache, no-referrer referrer policy and nosniff options are all
+- [ ] **7.3** A multi-line value is returned byte-identically. *Store a real private
+      key submitted with CRLF endings, fetch it, write it to a file and have the
+      relevant tool parse it — `ssh-keygen -y` derives the matching public key. Asserting
+      on the string is not the same as asserting the artefact still works.*
+- [ ] **7.4** A final newline survives, and a value of only whitespace is refused.
+- [ ] **7.5** No-store cache, no-referrer referrer policy and nosniff options are all
       present.
 
 ## 8. Input handling

@@ -55,7 +55,7 @@ If you build on something existing, **delete the routes rather than filtering th
 And check what the host does automatically: the pastebin's garbage collector deleted
 records that had not been read in N days, which for a rarely-used credential is exactly
 the wrong behaviour, applied silently, to the entry you would miss most. That is why
-[§1.1.4](02-specification.md#11-secret) forbids expiry outright.
+[§1.1.5](02-specification.md#11-secret) forbids expiry outright.
 
 ### Concurrency on the last read
 
