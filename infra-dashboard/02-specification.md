@@ -287,6 +287,20 @@ group outlet.
 
 ---
 
+**4.10** Where several machines share one power control, an implementation MUST
+NOT infer a single machine's state from that shared reading in both directions.
+The reading MUST be treated as definitive only where it is: a shared control
+reporting *off* establishes that every machine behind it is off; the same
+control reporting *on* establishes only that the set has power. *A machine that
+has halted on a set which still has power is not distinguishable, from that
+signal alone, from one that has hung - and reporting the second is reporting a
+fault that may not exist.*
+
+**4.11** Where that ambiguity exists, it MUST be surfaced at the level the
+signal describes - the set - rather than attributed to each machine. A set MAY
+report that it has power while none of its machines respond; a machine MUST NOT
+claim that on its own behalf.
+
 ## 5. Jobs
 
 **5.1** Every action MUST produce a job with an identifier, a status, an ordered

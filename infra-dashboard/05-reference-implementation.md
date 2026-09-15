@@ -101,6 +101,36 @@ arrives while the first is still holding connections open.
 starting while one is in flight.** One or the other. Choosing neither is the default, and
 it is invisible until something is slow.
 
+### The inventory and the code that reads it deploy separately
+
+The machine list is configuration, shipped as a file the running application
+reads. The parser for it is in the image. Those are two artefacts, and they are
+deployed independently - which is easy to forget, because in the source tree
+they sit next to each other and change in the same commit.
+
+A schema change was applied to the live inventory while the running image still
+required the old shape. The application crash-looped on startup with a
+configuration error, and the dashboard went down. The change was correct; the
+*order* was not.
+
+Two rules, and the second is the one that makes the first survivable:
+
+1. **Ship the image first, then the config.** The code that can read the new
+   shape has to be running before the new shape arrives.
+2. **Make the new parser tolerate the old shape**, so step 1 is a no-op that
+   changes nothing visible. A field that has been removed should be ignored
+   rather than rejected. Without this the two artefacts cannot be deployed
+   separately at all, and you are back to needing them atomic - which they are
+   not.
+
+Verify the tolerance rather than assuming it: parse the *currently deployed*
+config with the *new* parser before deploying either.
+
+*The same edit also reached the repository inside an unrelated commit, because
+it was staged with a blanket "add everything" while another change was in
+flight. Stage paths you intend, particularly when more than one thing is being
+worked on at once.*
+
 ### Verifying against the deployment tool instead of the live object
 
 A configuration change was edited, deployed, and reported deployed. The revision number
@@ -177,6 +207,52 @@ glance, that is not a cosmetic bug.
 
 **Either build the artefact in CI, or make checking it part of review — and never accept
 "no rebuild needed" without grepping the artefact for the class.**
+
+### A stop that leaves the power on
+
+The set stop shut every machine down gracefully and deliberately never touched
+the plug, reasoning that cutting it would hard-cut a member that had not shut
+down. The reasoning was sound and the conclusion was too broad.
+
+What the operator got, hours later: four machines halted exactly as asked, the
+shelf still drawing power, and every card reading *powered but wedged* - the
+one state the dashboard exists to surface as a fault. Nothing was wrong. The
+display was describing a correct outcome as a failure.
+
+Cut the plug once **every** member is confirmed down, and not before. If one is
+still answering, leave the plug alone and name that machine: the restraint that
+motivated doing nothing is right, it simply stops applying when there is
+nothing left to protect. Where there is no plug at all, say so - "stopped, shelf
+still powered" is a fact worth stating rather than silently skipping.
+
+*Found by an agent doing unattended overnight work through the API, not by a
+test. An action that ends in a state nobody looks at until morning is exactly
+where this class of defect survives.*
+
+### A shared signal is definitive in one direction only
+
+The corollary, and the more generalisable half.
+
+A machine on a shared plug has no plug of its own, so its power reading comes
+from the group's. That looks symmetrical and is not:
+
+- the plug reading **off** is definitive - every machine behind it is off
+- the plug reading **on** describes the *shelf*, not the machine in front of
+  you: it means "something here has power"
+
+Used symmetrically, a halted machine on a powered shelf becomes "powered but
+not answering", which is the signature of a wedged box. The fault is not the
+reading; it is treating one direction's certainty as if it ran both ways.
+
+Use the shared reading where it is definitive and stop where it is not. The
+ambiguity does not disappear - put it where the signal is still true. A shelf
+can honestly say *"powered, and nothing on it is answering"*; a single machine
+cannot say anything of the sort from the same data.
+
+The cost is real and worth stating at the point of the change: a genuinely
+wedged machine on a shared plug now reads the same as a halted one. That was
+the original argument for the fallback, and it is why this reversal needs to be
+deliberate rather than incidental.
 
 ### Tests that pass with their subject removed
 

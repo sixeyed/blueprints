@@ -125,6 +125,23 @@ test above it is asserting against fiction.
 - [ ] **5.11** A group job result carries a per-member outcome, not only an aggregate.
 - [ ] **5.12** An individual stop of a member never changes the group outlet.
 
+- [ ] **5.13** Stopping a set where every machine shuts down cleanly ends with
+      the shared power control **off**, and the job says so.
+- [ ] **5.14** Stopping a set where one machine is still reachable afterwards
+      leaves the power control **on**, and the job names that machine. *Verify
+      the control was never switched, not merely that the job reported a
+      problem.*
+- [ ] **5.15** Stopping a set with no power control configured still succeeds,
+      touches nothing, and reports that the set remains powered.
+- [ ] **5.16** A machine that has halted on a set whose control still reads *on*
+      reports **stopped**, not unreachable.
+- [ ] **5.17** A machine with its **own** power control, unreachable while that
+      control reads *on*, still reports **unreachable**. *This is the wedged
+      case; 5.16 must not cost you it where the signal really
+      does describe the machine.*
+- [ ] **5.18** A set whose control reads *on* while none of its machines respond
+      reports that state at the set level.
+
 ## 6. Jobs and concurrency
 
 - [ ] **6.1** No job reports `succeeded` without having observed the intended end state.
