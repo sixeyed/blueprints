@@ -17,7 +17,7 @@ language you prefer, and enough to tell whether what it built is correct.
 | | |
 |---|---|
 | [01-concept.md](01-concept.md) | The problem, the idea, and when *not* to use this |
-| [02-specification.md](02-specification.md) | Normative requirements: signals, derived state, actions, power groups, jobs, simulated mode |
+| [02-specification.md](02-specification.md) | Normative requirements: signals, derived state, actions, power groups, jobs, simulated mode, programmatic access |
 | [03-acceptance-criteria.md](03-acceptance-criteria.md) | Testable criteria. Build against these |
 | [04-usage.md](04-usage.md) | What living with it looks like, and how to read a row |
 | [05-reference-implementation.md](05-reference-implementation.md) | Non-normative: one implementation's choices, and the traps it hit |
@@ -53,9 +53,10 @@ Three things worth saying to the agent explicitly, because they invert normal in
 ## Scope of this blueprint
 
 **In:** a declared inventory of machines, three-signal state derivation, graceful stop
-followed by power cut, start via power, power groups sharing one outlet, virtual machines
-whose start depends on a host, long-running actions as observable jobs, a simulated
-estate as the default mode.
+followed by power cut, start via power, power groups sharing one outlet (including a hard
+power cycle for a wedged set), virtual machines whose start depends on a host,
+long-running actions as observable jobs, a simulated estate as the default mode, and an
+optional, deliberately narrow programmatic entry point for agents.
 
 **Out:** provisioning, configuration management, scheduling, capacity planning, metrics
 and alerting, wake-on-LAN discovery, out-of-band management protocols, anything that

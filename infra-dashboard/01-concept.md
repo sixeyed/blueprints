@@ -97,6 +97,12 @@ of a set stop, or have its outlet cycled underneath it while it is shutting down
 Several machines can share one smart plug. That single fact breaks the per-machine model
 in three specific ways, and it is worth being precise about which.
 
+First, though, a group is about **power, not identity**. The plug under a shelf feeds
+whatever happens to be on the shelf — a control-plane node, two workers and a
+workstation, say. The page may sort machines by what they are; the group describes where
+their electricity comes from, and the two do not line up. Model the group as a heading
+in the list and the first shelf that spans two headings cannot be expressed at all.
+
 **Start is a set operation.** One outlet cannot bring up one of four machines. The Start
 control belongs to the group. Individual Start must be *removed* from members — not
 disabled, not greyed with a tooltip. Removed, because it can never work, and a disabled
@@ -116,6 +122,28 @@ Starting a group while some members are already running means power-cycling the 
 ones. That must be refused by default and overridable only by a deliberate act that names
 what it is about to hard-cycle. The alternative — a set start that silently yanks power
 from a machine someone is working on — is far worse than an error message.
+
+A group's own controls are **about the plug, not the machines**. Stop switches it off
+(after shutting members down gracefully); Start switches it on. So availability follows
+the plug: a shelf of halted machines on a live plug still has something to stop, and
+nothing to start. Driving those buttons from member state gets both of them backwards at
+once. And when the plug reading is unknown — the power controller did not answer — offer
+both, because that is when the operator most needs them and "already off" would be a
+claim made without evidence.
+
+That leaves one case with no clean route back: a shelf that is wedged. Graceful shutdown
+will not work on it, and Start is refused because the plug is already on. That is what
+**Cycle** is for — off, a pause, on, then wait for the members. It deliberately does
+*not* try a shutdown first. The case it exists for is the one where a shutdown would not
+work, and trying first only makes that case slower. It is always available, takes no
+override because there is nothing to override, and says plainly in its confirmation that
+it is an unclean cut.
+
+**Some machines matter more than their row suggests.** Stopping the shelf that holds the
+cluster's control plane takes the cluster API with it, and the membership signal goes
+unknown for every machine until it returns. That must be said before the confirmation —
+not refused, it is a deliberate act — and it must be *configuration*, not read from the
+cluster, because you need the fact at exactly the moment the cluster cannot tell you.
 
 ## Simulated mode is a safety property
 
@@ -147,6 +175,31 @@ matching method names and signatures — is what stops simulated confidence quie
 to mean anything. Without it the two drift, and the drift is invisible: the test suite
 goes green against a fake that no longer behaves like the thing it stands in for.
 
+## A second door, for agents
+
+Being able to say *"turn off shelf 2"* to an agent at the end of the day, or *"turn on
+all the nodes"* in the morning, turns out to be most of the value of having the buttons
+at all. But the page sits behind a browser login, and an agent cannot do a browser
+login.
+
+So there is a second entry point, authenticated by the application itself with named
+keys — and because it is a second door, it is **as small as the job allows**: read state,
+read jobs, stop, start, cycle. Nothing that runs a command, deletes anything, or
+reschedules workloads. The permitted set is one declared list, checked against what is
+actually served, so widening it is a visible edit rather than an accident.
+
+Two rules keep the second door honest. **One implementation of each action, served on
+both doors**, with every safety rule expressed once — otherwise the rules drift, and the
+copy that drifts is the one nobody is looking at. And **the state response carries the
+answer to "may I?"**: for every subject and action, whether it is currently permitted and
+why not, computed by the same rules that would refuse the request. An agent that checks
+first does not get refused, and when it reports back it has a reason it can repeat.
+
+Agents also turned out to be the best tester this design has had. The set-stop defect in
+[05](05-reference-implementation.md#a-stop-that-leaves-the-power-on) was found by an
+agent stopping a shelf overnight — an action whose result nobody looks at until morning,
+which is precisely where a quietly wrong outcome survives.
+
 ## When not to use this
 
 - **Your machines are all cloud instances.** Your provider's console already has one
@@ -159,7 +212,9 @@ goes green against a fake that no longer behaves like the thing it stands in for
   per-outlet control and an API — that is this tool's job done properly, by hardware, with
   power state as a first-class fact rather than an inference. Use it.
 - **You need this to work unattended.** There is no scheduling, no policy engine and no
-  remediation. It is a page you look at and press things on.
+  remediation. An agent can press the buttons through the programmatic entry point, but
+  it is acting on someone's instruction, not on a policy. If you want "power off at
+  night unless something is running", that is a different system.
 - **You have one machine.** The join is not hard for one machine. Open two terminals.
 
 The sweet spot is a heterogeneous estate of roughly five to thirty machines, mixed
