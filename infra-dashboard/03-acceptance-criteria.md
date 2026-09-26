@@ -38,6 +38,11 @@ test above it is asserting against fiction.
       path that issues one. *Change it to a value that cannot work and assert every
       remote path fails, not one of them.*
 - [ ] **1.7** Startup fails on invalid configuration rather than at the point of use.
+- [ ] **1.8** A power group whose members span every presentational category loads and
+      renders, and each member names its group. A machine with no power control says so.
+- [ ] **1.9** An inventory still carrying a field removed from the schema loads, and the
+      field is ignored. *Parse the currently deployed inventory with the new parser
+      before shipping either.*
 
 ## 2. Signals and derived state
 
@@ -141,6 +146,28 @@ test above it is asserting against fiction.
       does describe the machine.*
 - [ ] **5.18** A set whose control reads *on* while none of its machines respond
       reports that state at the set level.
+- [ ] **5.19** With the group control reading *on* and every member halted, the group
+      offers Stop and not Start. With it reading *off*, the group offers Start and not
+      Stop. *Assert on the capability in the response, for both states — this pair was
+      once backwards in both directions at once.*
+- [ ] **5.20** With the group control reading `unknown`, both Stop and Start are offered,
+      and nothing reports the control as off.
+- [ ] **5.21** A cycle issues no shutdown to any member. *Assert the remote shell adapter
+      was not called — not that the job succeeded.*
+- [ ] **5.22** A cycle is offered with members running, halted, or unreachable, and takes
+      no override parameter.
+- [ ] **5.23** A cycle is refused while any member has a job of its own, naming it, and
+      refused for a group with no power control.
+- [ ] **5.24** A cycle holds power off for the group's configured delay, not for any
+      delay belonging to Start. *Set the two to different values and assert which one
+      was used.*
+- [ ] **5.25** A cycle completes only once members are observed reachable, exactly as a
+      start does (§4.1–4.3).
+- [ ] **5.26** A group with no power control offers Stop while any member is running, and
+      offers neither Start nor Cycle in any response.
+- [ ] **5.27** A stop or cycle of a group containing an orchestrator control-plane
+      machine carries a warning in its confirmation and a flag in the state response,
+      and is not refused. The same action on a group without one carries neither.
 
 ## 6. Jobs and concurrency
 
@@ -215,6 +242,12 @@ test above it is asserting against fiction.
 - [ ] **9.4** Actions with physical consequence require a confirmation naming what is
       affected.
 - [ ] **9.5** A running job is reachable from its machine's row.
+- [ ] **9.6** Every page states the build's version, and it matches the label of the
+      artefact that served it. A build with no version supplied says so rather than
+      falling back to a guess.
+- [ ] **9.7** Pressing an action inside a group's card does not also trigger whatever
+      the card itself does when clicked (filtering, expanding). *Nested controls
+      inherit their container's handler unless something stops them.*
 
 ## 10. Operational
 
@@ -229,6 +262,33 @@ test above it is asserting against fiction.
 - [ ] **10.4** A newly added machine's name resolves to the expected address, checked
       against the authoritative resolver. *Not merely that it resolves — a wildcard
       answers for names you never configured.*
+- [ ] **10.5** Every credential in the deployment can be recreated from its source of
+      record. *Delete it and redeploy; if nothing brings it back, it has no source.*
+- [ ] **10.6** Where the inventory is kept apart from the application, the inventory
+      about to be deployed is parsed by the build about to run it, somewhere that fails
+      before the deployment does.
+
+## 11. Programmatic access
+
+Only where it is offered (spec §11).
+
+- [ ] **11.1** No key, an empty key, a malformed header, a wrong key and a declared but
+      unissued key all produce the same response, byte for byte.
+- [ ] **11.2** The routes served on the programmatic entry point are exactly the declared
+      subset. *Enumerate the mounted router and compare with the declaration; a route
+      added to the router without being declared must fail this.*
+- [ ] **11.3** Every interactive-only action — session or command execution, data
+      deletion, scheduling changes — is not found on the programmatic entry point.
+- [ ] **11.4** For each refusal in §3–§6, the same request on both entry points gets the
+      same status and the same message. *Parametrise one test over both doors.*
+- [ ] **11.5** For every subject and action in the state response, the capability flag
+      is false exactly when the request would be refused, and a false flag carries a
+      reason.
+- [ ] **11.6** A job started programmatically logs the key name as its initiator, and no
+      log anywhere contains the key value.
+- [ ] **11.7** The state response reports the mode, and carries the control-plane flag
+      of §5.27.
+- [ ] **11.8** Revoking one named key leaves every other key working.
 
 ---
 

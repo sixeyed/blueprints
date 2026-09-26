@@ -32,6 +32,7 @@ of them.
 | `power_group` | Reference to a group (§4). Nullable |
 | `orchestrator_node` | Name this machine has in the orchestrator. Nullable |
 | `host` | `id` of the machine this one runs on, for guests. Nullable |
+| `orchestrator_control` | Whether this machine hosts the orchestrator's control plane. Defaults to false |
 | `expected_stop_seconds` | Used for progress only (§5.6) |
 | `expected_start_seconds` | As above |
 
@@ -51,19 +52,31 @@ draw their power signal from the group (§4.2).
 Host references MUST NOT form a cycle, and the application MUST refuse to start if they
 do.
 
+**1.1.5** `orchestrator_control` MUST be declared in configuration, not read from the
+orchestrator. *The fact is needed at exactly the moment the orchestrator is unreachable —
+when someone is about to stop the machine that answers for it.*
+
 ### 1.2 Power group
 
 | Field | Notes |
 |---|---|
 | `id` | Stable, unique, URL-safe |
 | `display_name` | |
-| `outlet` | Reference the power controller understands. Required |
+| `outlet` | Reference the power controller understands. Nullable: a group with none can still be stopped, and nothing else (§4.14) |
 | `members` | Two or more machine `id`s |
+| `cycle_delay_seconds` | How long a cycle (§4.13) holds power off. Independent of any start timing |
 
 **1.2.1** A machine MUST belong to at most one power group.
 
 **1.2.2** A group with one member is permitted but MUST behave identically to a machine
 with its own outlet in every respect except where §4 says otherwise.
+
+**1.2.3** A power group MUST be independent of any presentational grouping of machines
+(by role, by kind, by location on the page). *Power and identity are different axes. A
+plug that feeds a control-plane node and two workers spans whatever categories the page
+sorts machines into, and a model where a group hangs off a display heading cannot express
+it.* Each machine's presentation MUST say which group it draws power from, or that it has
+no power control at all — silence and "no power control" MUST NOT look the same.
 
 ### 1.3 Job
 
@@ -71,10 +84,11 @@ with its own outlet in every respect except where §4 says otherwise.
 |---|---|
 | `id` | Unique |
 | `subject` | What the job acts on (§5.3) |
-| `action` | `stop`, `start`, or another declared action |
+| `action` | `stop`, `start`, `cycle`, or another declared action |
 | `status` | `pending`, `running`, `succeeded`, `failed`, `indeterminate`, `refused` |
 | `created`, `started`, `finished` | Timestamps |
 | `expected_seconds` | Copied from the subject's configuration at creation |
+| `initiator` | Who started it: the interactive user, or the name of the programmatic key (§11) |
 | `log` | Ordered, append-only entries |
 
 ### 1.4 Observation
@@ -285,8 +299,6 @@ down, is the characteristic failure of this whole design.*
 **4.9** Individual Stop MUST remain available for a group member, and MUST NOT touch the
 group outlet.
 
----
-
 **4.10** Where several machines share one power control, an implementation MUST
 NOT infer a single machine's state from that shared reading in both directions.
 The reading MUST be treated as definitive only where it is: a shared control
@@ -299,7 +311,42 @@ fault that may not exist.*
 **4.11** Where that ambiguity exists, it MUST be surfaced at the level the
 signal describes - the set - rather than attributed to each machine. A set MAY
 report that it has power while none of its machines respond; a machine MUST NOT
-claim that on its own behalf.
+claim that on its own behalf. The group's presentation MUST show the reading of its
+power control, and MUST show "no power control" distinctly from "off".
+
+**4.12** Where a group has a power control, its Stop and Start MUST follow the reading of
+that control, not the state of its members: Stop is available while the control reads
+*on*, Start while it reads *off*. *A set of halted machines on a live plug still has
+something to stop — the plug — and nothing to start; availability driven by member state
+gets both of those backwards.* Where the control reads `unknown`, both MUST remain
+available and neither MUST claim a state that cannot be seen. *Unknown is the moment an
+operator most needs the controls, and "already off" said without evidence is the same
+mistake as §4.10.*
+
+**4.13** A group with a power control MUST offer a **cycle**: power off, hold for the
+group's `cycle_delay_seconds`, power on, then wait for members as §3.3 does.
+
+- A cycle MUST NOT attempt a graceful shutdown first. *It is the action for a set that is
+  wedged — exactly the case where a graceful shutdown will not work — and an
+  attempt-then-cut design only slows that case down.* This property MUST be pinned by a
+  test, because it is the one a later "improvement" removes.
+- It MUST be available whatever state the members are in, and MUST NOT take an override:
+  there is no precondition to override.
+- It MUST still be refused where §5.4 would refuse any group job, and where the group has
+  no power control.
+- Its confirmation MUST state that it is an unclean power cut to anything running.
+
+**4.14** Where the group has no power control, Stop remains a graceful shutdown of each
+member and follows member state; Start and Cycle MUST NOT be presented, per §3.1.2.
+
+**4.15** A stop or cycle of a group containing a machine marked `orchestrator_control`,
+and a stop of such a machine alone, MUST say before confirmation that the orchestrator
+will be unavailable and that membership signals will go `unknown` for every machine
+until it returns. It MUST NOT be refused on that ground — it is a deliberate act — and
+where the action can be requested without a confirmation step (§11), the same fact MUST
+be available as data before the request.
+
+---
 
 ## 5. Jobs
 
@@ -441,6 +488,13 @@ there.
 **8.8** A health endpoint MUST exist. It MUST report the active mode and MUST NOT
 disclose credentials or inventory detail beyond what the interface already shows.
 
+**8.9** Every view MUST state the version of the build serving it, taken from the same
+source that labels the deployed artefact. A build that cannot determine its version MUST
+say so rather than guess. The health endpoint SHOULD report it too. *The deployment
+metadata of one build named a version seven releases behind the image actually running,
+and nothing on the page could contradict it. A version on the page is what makes "what
+is actually running" answerable without a terminal (§10.3).*
+
 ---
 
 ## 9. Configuration
@@ -460,6 +514,7 @@ Minimum surface:
 | Listing aggregate bound | no | Must relate to the refresh interval (§2.3.4) |
 | Refresh interval | no | |
 | Job retention | no | |
+| Programmatic key names | no | §11. Names only; values are credentials |
 
 **9.1** Configuration MUST be validated at startup, not at point of use. Validation MUST
 include §1.1.4, §1.2.1 and §4.2.
@@ -481,6 +536,15 @@ can be mounted rather than placed in an environment or a process listing.
 **9.5** Machine identifiers MUST NOT be reused for a different physical machine. *Job
 history and outlet mappings are keyed on them.*
 
+**9.6** A field removed from the inventory schema SHOULD be ignored, not rejected, for at
+least one release. *The inventory and the code that parses it deploy separately; a
+parser that rejects the old shape forces them to be atomic, which they are not.*
+
+**9.7** Every credential the application uses MUST have a source of record outside the
+running deployment, from which it can be recreated. *A credential made by hand in the
+deployment platform survives exactly as long as that platform does, and the day it
+matters is the day it is gone.*
+
 ---
 
 ## 10. Deployment
@@ -501,3 +565,66 @@ revision is not evidence that the configuration you edited was applied.*
 resolves to, not by whether it resolves at all. *A network with a wildcard record answers
 for every name in the domain, so a machine you have not configured still "resolves", to
 the wrong address.*
+
+**10.5** The inventory SHOULD be kept, reviewed and changed separately from the
+application's source. *Adding a machine to it grants the application power over that
+machine. That is the same class of decision as where the application is deployed, and it
+should not be changeable by a merge to the application — least of all when agents open
+changes against application repositories.* Where it is kept separately, the inventory
+about to be deployed SHOULD be checked with the parser of the build about to run it.
+
+**10.6** Where programmatic access (§11) is offered, the route by which it bypasses the
+interactive authentication MUST be declared separately from the rest of the routing, and
+MUST cover only the programmatic entry point. *"Which paths are not behind the login" is
+then answered by reading one declaration, not by auditing every route.*
+
+---
+
+## 11. Programmatic access
+
+An agent asked to "turn off the second shelf" cannot complete an interactive browser
+login. This section applies only where an implementation chooses to offer it; nothing
+requires one.
+
+**11.1** Programmatic access MUST be a separate entry point that the application
+authenticates itself, failing closed on anything it cannot positively match. It MUST NOT
+be a second credential accepted on the interactive entry point.
+
+**11.2** Its surface MUST be a strict subset of the interactive one: reading state,
+reading jobs, and the power actions of §3 and §4. It MUST NOT include anything that runs
+a caller-supplied command, deletes data, or changes the orchestrator's scheduling on its
+own. *It is a second door, and it is kept as small as the job allows. A key that could
+run a command on a machine turns every transcript that has ever held it into a
+compromise of the estate.*
+
+**11.3** The permitted subset MUST be declared in one place, and an automated check MUST
+compare the routes actually served on the programmatic entry point against it. *Then
+widening it is a visible, deliberate edit, not a property you verify by reading every
+route.*
+
+**11.4** Each action MUST have exactly one implementation, served on both entry points,
+and every precondition and refusal of §3, §4 and §5 MUST be expressed once and applied by
+both. *A hand-copied rule drifts, and the copy that drifts is the one nobody is
+watching.*
+
+**11.5** Keys MUST be named, so that one can be revoked without disturbing the others.
+Presented keys MUST be compared in constant time. A key name that is declared but has no
+value MUST never authenticate, and SHOULD be reported at startup. Every rejection — no
+key, an empty key, a wrong key, an unissued key — MUST be indistinguishable from the
+outside.
+
+**11.6** Every job started programmatically MUST record the key's name as its initiator
+(§1.3). The key's value MUST NOT appear in any log (§5.7).
+
+**11.7** The state response MUST carry, for every subject, whether each action is
+currently permitted and, where it is not, the reason in words a person can read. Those
+flags MUST be computed by the same rules that refuse the request (§11.4). *Checking a
+flag is cheaper than being refused, and an agent reporting back needs a reason it can
+repeat, not a status code.*
+
+**11.8** The state response MUST report the active mode (§7.7). *An operator reading
+"stopped shelf 2" in an agent's report needs to know whether anything really stopped.*
+
+**11.9** Anything the interactive confirmation of §8.5 or §4.15 would tell a person MUST
+be present in the state response as data, because there is no dialog for an agent to
+read.

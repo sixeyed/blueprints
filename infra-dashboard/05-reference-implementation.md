@@ -14,11 +14,24 @@ the page. A Tailwind stylesheet committed as a build output. Deployed by Helm ch
 to a *different* cluster from the one it manages, deliberately: a dashboard that stops
 machines must not be hosted on the machines it stops.
 
+The chart lives in the application's repository and deploys on merge: the build runs
+the suite, builds both architectures, and pushes a commit writing the new version into
+the chart. The **inventory does not live there** — it is a values file in the
+infrastructure repository, passed to the chart as a second source, for the reasons in
+[§10.5](02-specification.md#10-deployment). The chart refuses to render without it, so a
+deployment that lost its inventory fails rather than serving an empty page.
+
+Behind a browser OIDC proxy for people, with a second, narrower route for agents that the
+application authenticates itself (see *The agent API* below).
+
 Each of the three external systems sits behind an adapter with two implementations, real
 and simulated, and a test that asserts the pair have matching signatures.
 
-About ten machines in the inventory: three cluster nodes, two workstations, four guests
-on two of the nodes, and a group of small nodes sharing one plug.
+About ten machines in the inventory: cluster nodes, workstations and guests. Two shelf
+plugs power seven of them between them, and there are no per-machine plugs at all — so
+almost every power decision in this build is a group decision. Both shelves cut across
+the page's categories: one holds the control plane and two workers, the other
+workstations and workers.
 
 ## Decisions worth repeating
 
@@ -48,7 +61,23 @@ the comment somebody will "fix" it within a year.
 
 **Controls removed, not disabled.** The template does not render an individual Start for a
 group member, and the route refuses one. Two places, deliberately, because the template
-is the honest one and the route is the one that has to survive somebody's URL.
+is the honest one and the route is the one that has to survive somebody's URL. (Not
+applied everywhere it should be — see *Known divergences*.)
+
+**One route table, two routers.** Each action is one handler, declared once in a list
+with a flag saying whether agents get it, and registered onto both the session-guarded
+router and the key-guarded one. The agent subset is that flag, read in one place — and a
+test enumerates the mounted agent router against the list. Every refusal lives in one
+rules module both doors call. A second, hand-copied version of any rule would drift.
+
+**Availability computed on the server.** Every subject in the state response carries
+`canStop` / `canStart` / `canCycle` and a reason when false. The page renders from those;
+an agent plans from them. Neither re-derives the rules, so neither can offer what the
+route would refuse.
+
+**Cycle has a test that it does not shut anything down.** That is the property a
+well-meaning later change — "try graceful first, then cut" — would remove, and it would
+make the wedged-shelf case slower without making anything safer.
 
 ## Traps
 
@@ -254,6 +283,86 @@ wedged machine on a shared plug now reads the same as a halted one. That was
 the original argument for the fallback, and it is why this reversal needs to be
 deliberate rather than incidental.
 
+### Power modelled as a display heading
+
+The first model of a power group named the page section it belonged to, and hung the
+group's buttons off that heading. It worked while each plug happened to feed one kind of
+machine.
+
+Then the plugs were rearranged, and each shelf now fed machines from two sections. The
+model could not express it at all. Identity (what a machine is) and power (where its
+electricity comes from) are different axes. The group became its own thing with its own
+card, and each machine card now names its shelf — or says it has no plug, because
+silence and "no plug" had looked identical.
+
+The removed field was ignored rather than rejected, so the deployed inventory still
+parsed. That is the *inventory and code deploy separately* trap above, applied on
+purpose the second time.
+
+### Shelf buttons that followed the machines
+
+Once a set stop cut the plug, and a machine on a shared plug stopped claiming the plug's
+reading, the shelf's buttons were still computing availability from member state. A
+shelf of halted machines on a live plug offered Start (nothing was running) and refused
+Stop (nothing to stop). Both backwards: the plug was on, so there was something to stop
+and nothing to start.
+
+The buttons are about the plug, so they follow the plug. Member state decides only on a
+shelf with *no* plug, where Stop is a graceful shutdown that needs none. And an
+*unknown* plug enables both rather than guessing — the same lesson as the shared signal,
+one level up.
+
+### A credential that lived only in the cluster
+
+The credential the dashboard used to read the cluster was a Secret made by hand, in no
+repository. When the cluster's CA was rotated it died, and there was nothing to rebuild
+it from: the membership column went unknown on every card with nothing in either
+repository explaining why, or how to fix it. The README's instructions for recreating it
+pointed at a certificate the rotation had retired.
+
+It now comes from the same credential store as every other secret the chart uses,
+written by the same pre-sync job, under the same revision gate. **Every credential needs
+a source of record, or it survives exactly as long as the platform does.**
+
+A sharp edge that came with the fix: the mount is optional, but *optional* covers a
+missing object, not a missing key inside it. A Secret that exists without that key
+leaves the pod stuck creating rather than starting without cluster access. It is safe by
+ordering — the job writes every key at once, before the deployment — and it is called
+out at the volume, because it is sharper than it looks.
+
+### Packaging moved the authority with it
+
+Moving the chart into the application's repository moved the inventory with it, because
+the chart read the inventory as a file inside itself and a chart can only read its own
+files. That was the one part that should not have moved: adding a machine to the
+inventory is granting the application power over it, and that decision should not be
+reachable by a merge to the application — agents open changes there.
+
+The chart now takes the inventory as a value, supplied from the infrastructure
+repository. The rendered result was diffed against the file-based one and was
+byte-identical.
+
+The cost is stated rather than hidden: the test that loaded the live inventory with the
+application's own parser — the best test in the chart suite, which had caught an
+inventory the app would refuse at startup — could not see the file any more, and has not
+been replaced. The fix is to run the new image's parser against the inventory from the
+infrastructure repository's CI. Until then a malformed inventory shows up as a pod that
+will not start.
+
+### The version a page reports
+
+For a while the deployment's metadata said 0.6.0 while the pod ran 0.13.0. The chart's
+app version was written by hand and nothing kept it in step; there were also two copies
+of the chart configuration, so the one being edited was not always the one deployed.
+Every status the tooling showed agreed with the stale number, and nothing on the page
+could contradict it.
+
+The build now writes the version into the chart itself, so the two cannot disagree.
+
+Every page now ends with its version, baked into the image at build time from the same
+value that tags it. The runtime image does not carry the project file, so it cannot read
+the version at runtime; an image built without it says `dev` rather than guessing.
+
 ### Tests that pass with their subject removed
 
 Two found in this build, and both had been trusted for months.
@@ -312,6 +421,45 @@ numerals so digits do not jitter as they tick, and make state a semantic attribu
 markup rather than only a class — the tests assert on the attribute and survive a
 redesign.
 
+## The agent API
+
+A second router, mounted at `/agent/v1`, with a bearer-key dependency on every route and
+only the routes flagged for agents. Reached through a **separate ingress object** that
+carries no auth annotations, so "what is not behind the proxy" is answered by reading one
+file. Anything added under that path inherits the exposure, which is why the permitted
+set is one list rather than a property of each route.
+
+- Keys are named in the inventory, and each name maps to an environment variable
+  holding its value. Values are written into the deployment by the credential store's
+  job; the names appear in three places, and a test pins the two in the chart together.
+- Comparison is constant-time against every issued key. A declared name with no value is
+  logged at startup as not issued and can never match.
+- Every rejection is the same `401` with the same body.
+- A job started with a key logs `started via agent API key '<name>'`. The value is never
+  logged.
+- The state response carries the mode, per-subject capability flags with reasons,
+  whether a group includes the control plane, and the group's plug reading.
+
+Its documentation was written *for the agent*, from responses captured from a running
+instance rather than from the design, and it leads with the three things agents get
+wrong: read the flags before acting; "turn on all the nodes" means starting shelves; and
+cycle is a hard cut, with the control-plane shelf taking the cluster API with it. It
+also says plainly what is not there and why, so the agent asks rather than searches.
+
+## Known divergences
+
+Places this build does not meet the specification, recorded so a reimplementation does
+not copy them:
+
+- **Disabled controls for absent capabilities (§3.1.2).** A standalone machine with no
+  plug renders a disabled Start with a tooltip, and a shelf with no plug renders
+  disabled Start and Cycle. The capability is absent, not inconvenient, so these should
+  not be rendered. Shelf members get it right — their Start is not rendered at all.
+- **No control-plane warning on a single-machine stop (§4.15).** The warning appears when
+  stopping or cycling the shelf that holds the control plane, but not when stopping the
+  control-plane machine on its own, which takes the cluster API down just the same.
+- **The health endpoint does not report the version (§8.9).** The pages do.
+
 ## Configuration used here
 
 | Variable | Default | |
@@ -328,8 +476,11 @@ redesign.
 | `..._LISTING_BOUND` | `8` | seconds; must stay under the refresh interval |
 | `..._REFRESH_INTERVAL` | `10` | seconds |
 | `..._JOB_RETENTION` | `86400` | seconds |
+| `..._API_KEY_<NAME>` | — | one per key name declared in the inventory; unset means not issued |
 
-Expected stop and start durations are per machine in the inventory file, not here.
+Expected stop and start durations are per machine in the inventory file, not here. So
+are `controlPlane` on a machine, `cycleDelaySeconds` on a power group (default 10,
+deliberately independent of Start's own off delay), and the list of agent key names.
 
 ## Deployment notes
 
@@ -342,6 +493,10 @@ Expected stop and start durations are per machine in the inventory file, not her
   consequence**: stopping the node it runs on takes the page with it. Either pin it to a
   node you will not stop from the page, or accept that the last job you start on that
   node is the last thing you see.
+- **Two ingress objects.** The main one sends every path through the browser proxy; the
+  agent one routes only `/agent/v1`, more specific, so it wins for that prefix and
+  nothing else. Only the main one requests the certificate — two objects claiming it
+  would race.
 - **Check the mode after every deployment**, against the running object rather than the
   deployment output. It is the setting whose silent reversion matters most, and reverting
   it in the safe direction is harmless while reverting it in the other is not.

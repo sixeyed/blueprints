@@ -88,7 +88,39 @@ bench-01  stop group
 
 *Read the per-member lines, not the headline.* A group of four where one never went down
 must not end green, and that job log is the reason this specification insists on
-per-member outcomes.
+per-member outcomes. When every member does go down, the job cuts the plug and says so —
+so the shelf ends *off*, not halted on a live plug looking like four wedged machines.
+
+**The shelf's buttons are about its plug.** Stop is there while the plug is on, Start
+while it is off. If the plug reads unknown you get both, because the dashboard cannot see
+which one is a no-op. A shelf with no plug has only Stop, which shuts its members down
+over the remote shell and leaves them powered — and the job says the shelf is still
+powered rather than implying it is off.
+
+**Read the shelf, not the machines, when a plug is shared.** A machine on a shared plug
+cannot tell "halted" from "hung" — the plug being on describes the shelf. So the shelf
+card shows its plug, and when the plug is on and nothing on it answers, the *shelf* says
+so:
+
+```
+Shelf 2   plug: on   · powered, nothing answering        [Stop] [Cycle]
+  bench-a  stopped
+  bench-b  stopped
+  bench-c  stopped
+  bench-d  stopped
+```
+
+That is either four machines halted by hand with the plug left on, or a wedged shelf.
+The dashboard cannot tell which, and says only what it knows.
+
+**Cycle is the way back from a wedged shelf.** Off, ten seconds, on, then wait for each
+member. It does not try a graceful shutdown first — that is the point of it — so anything
+mid-write loses what it was writing. If the machines are healthy, Stop then Start is the
+polite route; Cycle is for when they are not answering and polite will not work.
+
+**The control-plane shelf warns you.** Stopping or cycling the shelf holding the
+cluster's control plane takes the cluster API down, and every membership column goes
+unknown until it is back. The confirmation says so. It does not stop you.
 
 ## Declaring a machine
 
@@ -135,6 +167,30 @@ Three things to get right when you add one:
   authoritative — not merely that it resolves. A wildcard record answers for names you
   have never configured, so a typo "works" until the first Stop goes somewhere else.
 
+## Driving it from an agent
+
+The programmatic entry point is for instructions like *"turn off shelf 2 when you are
+done"*. Give the agent a named key of its own, so what it did is attributable and the
+key can be revoked without touching anyone else's.
+
+The pattern that works:
+
+1. **Read state first.** One call returns every machine and group, the mode, and for
+   each action whether it is permitted right now and, if not, why.
+2. **Plan from the flags, not from the rules.** The flags already encode every
+   refusal. *"Turn on all the nodes"* means starting every group with Start permitted,
+   then every standalone machine with Start permitted — not starting machines one by
+   one, which a group member will refuse.
+3. **Say the costly things out loud.** A group flagged as holding the control plane
+   takes the cluster down. The agent should say so before and after, because the
+   person who asked for "shelf 1 off" may not have connected those.
+4. **Act, then follow the job**, and report what its log says — not just its status.
+   Say which mode it was in; "stopped shelf 2" in simulated mode stopped nothing.
+
+What the agent cannot do is on purpose: launch anything, delete anything, cordon or
+drain. Tell it so up front, so it asks you rather than hunting for an endpoint that was
+deliberately left out.
+
 ## Simulated mode, in practice
 
 The application starts simulated. Everything works: states change, jobs run and log,
@@ -159,6 +215,11 @@ is in, that is a bug in the interface, not in your attention.*
 - **Using the group-start override as the normal route.** If you take it routinely, one
   of your members is wedged and you have been power-cycling three healthy machines to
   avoid diagnosing it.
+- **Reaching for Cycle when Stop would do.** Cycle is an unclean cut. It exists for a
+  shelf that is not answering; on a healthy one it is a way to corrupt a disk faster.
+- **Handing an agent the interactive credential.** If it needs something the
+  programmatic entry point does not offer, that is a decision for a person, not a gap
+  to route around.
 - **Leaving a stale machine in the inventory after decommissioning it.** It sits there
   permanently unknown and trains you to ignore unknown rows, which are the rows that
   matter.
