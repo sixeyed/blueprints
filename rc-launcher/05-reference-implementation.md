@@ -16,7 +16,8 @@ Four target machines: two Mac Studios, an Intel NUC, a MacBook. The mix matters 
 different home paths, different package-manager locations, and one machine that sleeps.
 
 Small on purpose. A service that runs arbitrary commands on your machines should be
-readable end to end in one sitting.
+readable end to end in one sitting. It is a few hundred lines of server code and about
+three hundred of client.
 
 ## Decisions worth repeating
 
@@ -35,9 +36,24 @@ Every route — page, API, websocket upgrade — is guarded because the only pat
 application traverses something that checks first. There is no route to forget to
 decorate.
 
-**One name for two things.** The same generated string is the multiplexer session name
-and the driving tool's `--name`. What `tmux ls` shows and what the vendor's app shows are
-identical, which removes a whole class of "is that the same session?" confusion.
+**One name for two things.** The same string is the multiplexer session name and the
+driving tool's `--name`, which the launcher appends itself. What `tmux ls` shows and what
+the vendor's app shows are identical, which removes a whole class of "is that the same
+session?" confusion. The name is `<directory basename>-<HHMM>` unless the operator types
+one; either way it goes through one filter — runs of anything outside `[A-Za-z0-9_-]`
+become `-`, edges trimmed, 60 characters at most.
+
+**The default command is configuration.** It lives in the same inventory file as the
+machines, and the page receives it as a data attribute on the command box rather than
+as a constant in the script. One source of truth, and changing the flags is an edit and
+a chart deploy. The current default is
+`claude rc --spawn=same-dir --permission-mode auto`.
+
+**Simulated is the default mode.** An environment variable picks the adapters: simulated
+(an in-memory set of machines; nothing leaves the process) or live. A container that
+forgets the variable cannot run anything on anything, and the page carries a banner
+saying which mode is live — in both modes, because "Live mode" is worth saying on the
+page that runs commands on your machines.
 
 **Nothing new on the machines.** The websocket bridge relays over the SSH connection the
 launcher already makes. No daemon, no new port, no second thing to keep patched.
@@ -227,6 +243,51 @@ stripped. `.` and `:` are session and window separators for `tmux`, so a directo
 `my.project` produces a session that is created successfully and can then never be
 attached to or killed, because every targeting command parses the name instead.
 
+### …and then it came back
+
+A day of use later, a list of sessions all called `blueprints-1412`,
+`blueprints-1438`, `blueprints-1503` was a list you had to open one by one.
+Naming a session turned out to be genuinely useful, so the field returned — with a
+caller this time, and behind the **same** filter the generated name already went
+through, not a second one written for it.
+
+The test that had asserted "the name field is ignored" was now asserting the wrong
+contract. It was rewritten to assert the property that made removal necessary — whatever
+comes back contains no character outside the allow-list — and proven by bypassing the
+filter and watching it fail. Rewriting a security test because the feature changed is
+fine. Deleting it because it went red is how the field reached a shell the first time.
+
+Two follow-ons. The name is **not** remembered between launches, because it identifies
+one session. And a command that carries its own `--name` is refused with a 400, because
+the launcher appends one and two `--name` flags give tmux one identity and the vendor's
+app another.
+
+### A remembered command shadows the configured one
+
+The command box remembers what you last typed, in browser storage. The first version
+stored whatever was in the box at launch — usually the default, untouched.
+
+When the default moved into configuration and then changed, the new default deployed
+correctly, was served to the page correctly, and never appeared: browser storage still
+held a copy of the old default, and a remembered value wins over a default. It looks like
+the deploy failed.
+
+Store a command only when it differs from the configured default, and clear the stored
+value when the operator puts the box back. The client test pins the box against the
+configured value, not a literal, so changing the default does not mean editing the test.
+
+### The simulation that could not reach the core flow
+
+The directory list comes from running a short script over SSH. The simulated SSH adapter
+did not recognise that script, so in simulated mode the endpoint could not succeed at all
+— the page loaded, you selected a machine, and the one thing the page is for could not be
+exercised or demonstrated without a real machine on the network.
+
+Nothing failed, because nothing tested the page end to end in simulated mode. Treat an
+operation the simulation cannot reach as a defect, and keep a test that compares the live
+and simulated adapters' method names and signatures, or the simulation quietly stops
+meaning anything.
+
 ### The machine is a prerequisite, not a bug
 
 A machine must be signed in to an account with the right entitlement for the driving tool
@@ -291,52 +352,114 @@ had measured nothing.*
 
 ## The interface
 
-One page.
+One page, in this order.
 
-**Launch**, at the top: machine, directory, command, button. The directory control is a
-filterable list — one machine had 93 trusted directories and another had 4, so a plain
-select element is unusable at one end and fine at the other. Typing narrows it; a
-free-text entry covers anything not listed. The machine's home directory is excluded,
-compared against `$HOME` read live from that machine.
+**Machines**, at the top: one card per configured machine — its id, its address, a
+display name, the directory currently chosen for it, **Select** and **Launch**, and a row
+for each session running on it with **Open** and **Kill**. Machines come first because
+selecting one is what loads the directory list. With the fields first, the card you had
+just selected was off-screen on a tablet and a tap looked like it had done nothing.
 
-**Sessions**, below: one row per running session across all machines, grouped by machine,
-each with its name, directory, age, and Attach / Kill. Unreachable machines are shown as
-unreachable rather than being quietly dropped, because a missing machine reads as "no
-sessions there" and that is a different fact.
+**Session name**: optional, empty on every load, with a note saying which characters
+survive.
 
-**The terminal** opens in a modal over the page — focused synchronously on the click, with
-a copy-all control and a close that detaches rather than kills.
+**Command**: pre-filled with the remembered command, or the configured default.
 
-Design notes that turned out to matter: show the machine on every session row even
-though the rows are grouped, because the grouping header scrolls away on a phone; and put
-Kill behind enough friction that a thumb does not hit it while scrolling.
+**Project directory**: a filter box over the trusted directories of the selected machine,
+read live over SSH from the driving tool's own record of trusted projects, with the
+machine's `$HOME` (also read live) removed. One machine had 93 and another had 4, so a
+plain select is unusable at one end and fine at the other. Typing narrows the list, at
+most 100 rows are drawn, and the chosen row is ticked where the tap happened. Choosing
+a row remembers it for that machine and enables that machine's Launch.
+
+**The terminal** opens in a modal that takes 90% of the viewport — focused synchronously
+on the click, sized to the dialog, with Copy all and a Close that detaches rather than
+kills. Launch opens it on the new session with no second step.
+
+The sessions list polls every ten seconds. Kill and Launch force a refresh past the
+in-flight guard, and a sequence number discards stale replies.
 
 ## Configuration used here
 
-| Variable | Default | |
+The machines and the default command are in a YAML inventory, mounted from a ConfigMap:
+
+```yaml
+sessionCommand: "claude rc --spawn=same-dir --permission-mode auto"
+
+sessionHosts:
+  - id: studio-01
+    name: Studio
+    ssh: { host: studio-01.example.com, user: you }   # port defaults to 22
+    # Neither claude nor tmux is on a non-interactive PATH on macOS.
+    pathPrefix: "PATH=/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin:$PATH"
+```
+
+`pathPrefix` is put in front of every remote command — tmux, the directory script, the
+driving tool. A missing id, host or user stops the service at startup; so does a
+duplicate id.
+
+| Setting | Default | |
 |---|---|---|
-| `..._MACHINES` | — | required; label, host, user, tool paths per machine |
-| `..._SSH_KEY` | — | required; accepts a file path, mounted not embedded |
-| `..._PUBLIC_URL` | — | required; builds absolute URLs |
-| `..._PROBE_TIMEOUT` | `1` | seconds; reachability gate before the real connection |
-| `..._CONNECT_TIMEOUT` | `5` | seconds; bounds the connect phase specifically |
-| `..._COMMAND_TIMEOUT` | `10` | seconds; distinct from the above |
-| `..._POLL_INTERVAL` | `5` | seconds; client-side session list refresh |
-| `..._SIMULATE` | off | development only; visible in the UI when on, not selectable per request |
+| `..._MODE` | `simulated` | `simulated` or `real`; never per request |
+| `..._SSH_KEY` | a mounted path | a file path; the key is mounted, not embedded |
+| reachability probe | 3 s | plain TCP connect to the SSH port, gating every SSH call |
+| SSH connect | 10 s | bounds the connect phase specifically |
+| list command | 20 s | `tmux ls` on one machine |
+| list, per machine | 8 s | overall cap on one machine's share of the fan-out — below the poll interval, so polls cannot stack |
+| launch command | 30 s | create and send-keys, in one SSH call |
+| directories | 20 s | the trusted-projects script |
+| poll interval | 10 s | client-side |
+
+The timeouts are constants in code, not configuration. That has been fine for four
+machines; it is the first thing to change for a fifth on a slower link.
 
 ## Deployment notes
 
-- **One ingress, one path, no exceptions.** No node ports, no host ports, no second
-  service, no "temporary" plain-HTTP route. Verify from outside with no credentials
-  after every deployment change, not after every code change — this breaks in the parts
-  of the configuration the application's own tests cannot see.
+- **One ingress, and every route behind it.** The Ingress guards every path with the
+  auth subrequest, including the websocket upgrade. No route that launches, kills,
+  lists directories or attaches a terminal is reachable any other way.
+- **No node ports, no host ports, no "temporary" plain-HTTP route.** There used to be a
+  NodePort, and it is not coming back — see the trap above. Verify from outside with no
+  credentials after every deployment change, not after every code change.
 - **The websocket needs the auth check applied to its upgrade**, and not every proxy
   configuration does that by default. Check it explicitly; it is the route most likely to
   be left open, because it is neither a page nor an API call.
 - **Mount the SSH key, do not embed it.** And give it only the access the launcher needs
   on each machine.
+- **Pin host keys.** Give the SSH client each machine's host key and have it refuse any
+  other ([§10.6](02-specification.md#10-deployment)). Whoever answers for a machine's
+  name receives the launcher's key and a command to run. Rebuilding a machine then means
+  updating its pinned key, which is a small price for that.
 - **Machines that sleep will dominate your latency budget.** Either wake them, exclude
   them, or make sure the reachability probe is short enough that one asleep machine costs
   a fraction of a second.
 - The launcher is stateless. Restarting it disturbs nothing; the sessions belong to the
   multiplexers on the machines and are rediscovered on the next list.
+
+## Where it falls short of the specification
+
+Written down rather than smoothed over, because a blueprint whose reference quietly
+disagrees with it teaches the disagreement.
+
+- **An unreachable machine looks empty.** The listing returns no sessions for a machine
+  that failed its probe or timed out, and the card renders exactly as it would for a
+  machine with nothing running. [§7.3](02-specification.md#7-listing-and-lifecycle)
+  requires it to be reported as unreachable, and that is the right requirement: "no
+  sessions there" and "could not ask" are different facts, and the second is the one
+  that should stop you launching.
+- **No way to type a directory.** The API accepts any directory, but the page only offers
+  the trusted list. [§5.4](02-specification.md#5-working-directories) asks for an entry
+  box; in practice its absence has been tolerable because trusting a new directory is
+  something you do at a prompt anyway.
+- **Kill has no friction.** It is a link next to Open, with no confirmation. A thumb has
+  not hit it yet.
+- **The disambiguator is the minute.** Two unnamed launches from one directory inside
+  the same minute collide; the second is refused with a 409 rather than typed into the
+  first ([§3.12](02-specification.md#3-launching-a-session)), which is safe but
+  surprising.
+- **`pathPrefix` is optional and unchecked.** A machine entry without one starts fine and
+  fails at the first remote command with 127, which is the point-of-use failure
+  [§9.1](02-specification.md#9-configuration) exists to prevent.
+- **The health check is not empty.** It returns the mode and a count. It is reachable
+  only from inside the cluster, for the kubelet, but
+  [§2.2](02-specification.md#2-authentication) says nothing at all.

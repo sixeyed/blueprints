@@ -6,7 +6,8 @@
 
 Everything after "the session exists and you can see it" belongs to the vendor's own
 app. The launcher has no chat interface, no transcript, no history, no notion of what
-the driving tool is doing. It is a page with three fields and a terminal.
+the driving tool is doing. It is a page with a machine picker, three fields and a
+terminal.
 
 That boundary is why the tool stays small enough to audit in one sitting, which matters
 a great deal for something that runs arbitrary commands on your machines.
@@ -20,11 +21,12 @@ You are on a train. Something occurs to you about a project on the machine at ho
 
 2. Machine:    studio-01
    Directory:  type "blue" — the list narrows to ~/dev/blueprints
-   Command:    claude rc            (pre-filled from last time)
+   Name:       (left empty — one is made from the directory and the time)
+   Command:    claude rc --permission-mode auto     (the configured default)
 
 3. Press Launch. A terminal opens.
 
-   $ claude rc
+   $ claude rc --permission-mode auto --name blueprints-1432
    Error: this machine is not signed in.
 
 4. You are at a prompt, in the right directory. Sign in, right there.
@@ -33,9 +35,9 @@ You are on a train. Something occurs to you about a project on the machine at ho
    Open https://example.com/oauth/device?code=WXYZ-1234
    ...
 
-5. Run it again.
+5. Run it again — up-arrow, Enter.
 
-   $ claude rc
+   $ claude rc --permission-mode auto --name blueprints-1432
    Session blueprints-1432 connected. Control it from the app.
 
 6. Close the tab. The session keeps running.
@@ -68,11 +70,41 @@ session you can come back to. Launch on a machine that stays awake, or expect to
 It is free text. That is deliberate, and it is the reason the whole service sits behind
 authentication.
 
+It starts pre-filled with the default from configuration. The flags you want change more
+often than the launcher does, so the default is an edit and a redeploy, not a release.
+If you edit the box, your version is remembered; put it back to the default and the
+launcher forgets it, so a later change to the default reaches you.
+
 ```
-claude rc                                   # the driving case
+claude rc --permission-mode auto            # the driving case, and a sensible default
 claude rc --model opus                      # arguments pass straight through
 claude --continue                           # resume, if the tool supports it
 ```
+
+`--permission-mode auto` deserves a moment's thought rather than a copy. A session you
+pick up from a phone has nobody at the keyboard to approve tool calls one at a time, so
+without it the session stalls on the first approval. With it, the session acts without
+asking — on your machine, as your account. That is the right trade for this use, and it
+is a trade.
+
+Do not put a name argument in the command. The launcher adds one itself, so that the
+multiplexer and the vendor's app agree, and it refuses a command that already has one.
+
+## Naming a session
+
+Leave the name empty and you get the directory plus the time: `blueprints-1432`. That is
+fine for one session and useless for five, because five sessions in the vendor's app
+that all start `blueprints-` are five sessions you open one by one to find the right one.
+
+Type a name when you will want to find it again — `footer-fix`, `review-pr-12`. Anything
+outside letters, digits, `-` and `_` is replaced, so `fix: the footer` becomes
+`fix-the-footer`. The box is empty again after every launch, on purpose: a name
+identifies one session, and reusing it either collides with the running one or gives
+you two that look the same.
+
+Launching twice from the same directory inside the same minute without a name collides
+too. The launcher refuses the second rather than typing into the first; wait a minute,
+or name it.
 
 What not to put in it:
 
@@ -134,3 +166,7 @@ it opens, the phone experience is a terminal you cannot type into, which reads a
 - **Exposing it "just on the LAN" without authentication.** Every device on that network,
   and everything running on those devices, now has a shell on your machines. See
   [01](01-concept.md#threat-model).
+- **Putting the launch route behind an API key** so your automation can use it. A key
+  door is for things that are safe behind one shared secret; running a free-text command
+  on a machine is not one of them. See
+  [§2.9](02-specification.md#2-authentication).

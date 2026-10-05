@@ -82,8 +82,8 @@ confidently wrong.
       connection to a target machine is opened**.
 - [ ] **3.5** An absent, empty or unverifiable identity is refused, and never resolves to
       a default or first user.
-- [ ] **3.6** There is exactly one network path to the application. *From an
-      uncredentialed host on the same network, attempt every address and port the
+- [ ] **3.6** There is exactly one network path to the application's operations. *From
+      an uncredentialed host on the same network, attempt every address and port the
       deployment publishes — service addresses, node-level ports, host ports, metrics,
       debug. Every one refuses.*
 - [ ] **3.7** Stopping the authenticating component makes the application **unreachable**,
@@ -92,6 +92,14 @@ confidently wrong.
       machines, in any field or log line.
 - [ ] **3.9** The health check, if unauthenticated, reveals no machine name, address,
       session name or count.
+- [ ] **3.10** If a second door for non-interactive clients exists (§2.9), none of
+      launch, terminate, directory listing or the terminal transport is reachable
+      through it — **with a valid key**. *Enumerate the routes mounted on that door from
+      the running application and compare them against the declared permitted set. A
+      test that only tries the launch path with no key proves the key check, not the
+      route set.*
+- [ ] **3.11** Through that door, an absent, empty, malformed or unknown key is refused,
+      and the refusal does not reveal which keys exist.
 
 ## 4. Values from the browser never become commands
 
@@ -102,11 +110,19 @@ confidently wrong.
       interpretation — the outer transport and the shell inside the session. *Assert on
       the machine, not on the string the launcher built.*
 - [ ] **4.3** The same holds for the session name on the attach and terminate paths.
-- [ ] **4.4** Posting a session name to the launch API does not set the session's name.
-      *The field should not exist; assert that supplying it changes nothing.*
+- [ ] **4.4** A supplied session name containing a command substitution, quotes,
+      separators and spaces produces a session whose name contains only allow-listed
+      characters, and the substitution never runs. *Assert both: on the name that comes
+      back, and on the machine. Then bypass the filter and watch this test fail — a
+      test of this field that still passes without its filter is how it reached a
+      shell the first time.*
+- [ ] **4.4.1** A supplied name that filters away to nothing gets a generated name, not
+      an error. A supplied name longer than the bound is truncated to it.
 - [ ] **4.5** A command containing quotes, pipes and redirection runs exactly as typed.
       *This is the deliberate capability; a test asserting it stops someone "fixing" §4.1
       by escaping the command too.*
+- [ ] **4.6** A command that sets the driving tool's own name argument is refused, and
+      nothing is created on the machine.
 
 ## 5. The terminal relay
 
@@ -138,10 +154,18 @@ confidently wrong.
       with different home paths**. *A single-machine test passes with the path hard-coded,
       which is the bug.*
 - [ ] **6.3** The list is filterable by typing, and usable with around a hundred entries.
-- [ ] **6.4** A directory not in the list can be launched.
+- [ ] **6.4** The launch API accepts a directory not in the list. A launch with no
+      directory is refused.
 - [ ] **6.5** The remembered directory is per machine. *Select one on machine A, switch to
       machine B, and assert A's path is not pre-filled.*
 - [ ] **6.6** The remembered command is global and survives a machine change.
+- [ ] **6.7** With nothing typed, a launch runs the configured default command. *Change
+      the default in configuration, restart, and assert the next launch uses the new
+      one — through the API with no command, and through the page's pre-filled box.*
+- [ ] **6.8** A command the operator typed that equals the default is not remembered.
+      *Leave the box at the default, change the configured default, reload, and assert
+      the box shows the new default rather than the old one.*
+- [ ] **6.9** The session name box is empty on every load and after every launch.
 
 ## 7. Naming
 
@@ -150,8 +174,14 @@ confidently wrong.
 - [ ] **7.2** Launching from a directory whose basename contains characters structural to
       the multiplexer produces a session that can be attached to **and terminated** by
       name. *The failure here is a session that exists forever and cannot be addressed.*
-- [ ] **7.3** Two launches from the same directory produce two distinct, targetable
-      sessions.
+- [ ] **7.3** Two launches from the same directory never share a session: either they
+      produce two distinct, targetable sessions, or the second is refused as a conflict.
+      *Force the collision — same directory, same disambiguator — and assert on the
+      machine that the first session received no input from the second launch.*
+- [ ] **7.4** A launch with the name of a running session is refused as a conflict, with
+      a status the client can tell apart from an unreachable machine.
+- [ ] **7.5** A supplied name is used verbatim, after filtering, in both places §7.1
+      checks.
 
 ## 8. Listing under failure
 
@@ -191,8 +221,15 @@ confidently wrong.
       completely.*
 - [ ] **10.2** The service refuses to start on invalid configuration — a machine entry
       missing an address or a tool location — rather than failing at the point of use.
-- [ ] **10.3** Any simulated mode is off by default, is not selectable per request, and
-      is visible in the interface when active.
+- [ ] **10.3** Any simulated mode is chosen by configuration only, is not selectable per
+      request, and every page says which mode is active — in both modes.
+- [ ] **10.3.1** With the mode left unset, nothing reaches a machine.
+- [ ] **10.3.2** In simulated mode, every operation works end to end: list, directories,
+      launch, terminate, attach. *Drive the page through the whole flow with no machine
+      on the network.*
+- [ ] **10.3.3** A test compares the live and simulated implementations of each remote
+      operation by name and signature, and fails when one gains a method or parameter
+      the other lacks.
 - [ ] **10.4** Absolute URLs are built from configuration. *Send a request with a
       misleading host header and confirm generated URLs ignore it.*
 - [ ] **10.5** A machine whose driving tool is signed in **only** at its desktop is
@@ -209,7 +246,7 @@ confidently wrong.
 
 ## Coverage note
 
-An implementation passing §1, §5 and §6 works. An implementation passing §2 is
+An implementation passing §1, §5, §6 and §7 works. An implementation passing §2 is
 *trustworthy* — it never tells you a session started when it did not. An implementation
 passing §3 and §4 is *safe to expose*.
 

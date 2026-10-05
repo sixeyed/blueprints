@@ -320,9 +320,10 @@ it from: the membership column went unknown on every card with nothing in either
 repository explaining why, or how to fix it. The README's instructions for recreating it
 pointed at a certificate the rotation had retired.
 
-It now comes from the same credential store as every other secret the chart uses,
-written by the same pre-sync job, under the same revision gate. **Every credential needs
-a source of record, or it survives exactly as long as the platform does.**
+It now comes from [tokenbin](../tokenbin/), the same credential store as every other
+secret the chart uses, written by the same pre-sync job, under the same revision gate.
+**Every credential needs a source of record, or it survives exactly as long as the
+platform does.**
 
 A sharp edge that came with the fix: the mount is optional, but *optional* covers a
 missing object, not a missing key inside it. A Secret that exists without that key
@@ -430,8 +431,13 @@ file. Anything added under that path inherits the exposure, which is why the per
 set is one list rather than a property of each route.
 
 - Keys are named in the inventory, and each name maps to an environment variable
-  holding its value. Values are written into the deployment by the credential store's
-  job; the names appear in three places, and a test pins the two in the chart together.
+  holding its value. The values live in [tokenbin](../tokenbin/), the approval-gated
+  credential store from the next-door blueprint: a job written into the chart reads them
+  at deploy time — only when a revision number in the chart changes, and only inside an
+  approval window the owner opens — and writes them into the Secret the deployment reads.
+  So issuing or rotating a key is a tokenbin entry, a revision bump and an approval, and
+  no key value is ever in a repository. The names appear in three places, and a test
+  pins the two in the chart together.
 - Comparison is constant-time against every issued key. A declared name with no value is
   logged at startup as not issued and can never match.
 - Every rejection is the same `401` with the same body.

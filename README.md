@@ -16,6 +16,8 @@ Each one contains:
 - **Usage** — what living with it looks like
 - **Implementation notes** — one build's choices, and the traps it hit
 
+> This repo is 100% written by Claude
+
 ## The blueprints
 
 | | |
