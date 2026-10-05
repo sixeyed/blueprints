@@ -63,6 +63,12 @@ and alerting, wake-on-LAN discovery, out-of-band management protocols, anything 
 needs to work when you are not looking at it. If you need those, you need a real
 infrastructure management system and this is the wrong shape.
 
+**Next door:** the reference implementation has a second page that starts remote CLI
+sessions on the machines. That is a separate blueprint, [rc-launcher](../rc-launcher/),
+because it stands on its own — and because it runs free-text commands, which puts it
+under a threat model this one does not need. If you build both into one service, keep
+the session routes off the agent entry point; §2.9 of that specification says why.
+
 ## Licence and provenance
 
 Written up from a working implementation running a lab of about ten machines. Nothing
