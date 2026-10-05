@@ -37,7 +37,7 @@ Something like:
 > implementation: treat its decisions as informative and its **Traps** section as
 > hard-won, but do not copy its stack unless it suits you.
 
-Two things worth saying to the agent explicitly, because they invert normal instincts:
+Three things worth saying to the agent explicitly, because they invert normal instincts:
 
 1. **Do not report whether the launch worked.** Creating a session in a multiplexer
    returns success whether the process inside it connected or died in 200 milliseconds,
@@ -53,14 +53,20 @@ Two things worth saying to the agent explicitly, because they invert normal inst
    second network path to the application defeats all of it, silently, while the guarded
    path keeps working perfectly. See [§2](02-specification.md#2-authentication).
 
-Neither of these looks broken when you get it wrong. That is why they are here rather
+3. **One filter for every name.** The operator may name a session, and that name reaches
+   a shell on the target machine. It goes through the same allow-list as the generated
+   name — not a sanitiser of its own — and the test for it must fail when the filter is
+   bypassed. See [§6](02-specification.md#6-naming).
+
+None of these looks broken when you get it wrong. That is why they are here rather
 than left to be discovered.
 
 ## Scope of this blueprint
 
 **In:** a configured set of target machines; launching a session in a chosen directory
-with a chosen command; a browser terminal attached on launch and reattachable later;
-listing and terminating sessions across machines; authentication as a hard prerequisite.
+with a configured default command or one you type, under a generated name or one you
+choose; a browser terminal attached on launch and reattachable later; listing and
+terminating sessions across machines; authentication as a hard prerequisite.
 
 **Out:** anything the driving tool does once it is running — transcripts, notifications,
 approvals, history. Provisioning machines, installing software on them, per-directory
@@ -69,6 +75,8 @@ remote development platform and this is the wrong shape.
 
 ## Licence and provenance
 
-Written up from a working implementation running against four machines. Nothing here is
-tied to that implementation's language, multiplexer, identity provider or hosting; where
-an example is needed, it uses `example.com` placeholders.
+Written up from a working implementation running against four machines. Nothing here
+is tied to that implementation's language, multiplexer, identity provider or hosting;
+where an example is needed, it uses `example.com` placeholders.
+[05](05-reference-implementation.md) ends with the places the reference still falls
+short of this specification.

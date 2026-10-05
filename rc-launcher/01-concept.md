@@ -96,9 +96,9 @@ is that nobody unauthenticated ever reaches the page, the API, or the terminal t
 from the authenticating layer in front of it, and from there being exactly one way in.
 
 **Requires:** authentication on every route, enforced before the request reaches the
-application; no second network path to the application by any address, port or protocol;
-and browser-supplied values quoted for every shell that will interpret them, so that a
-*directory name* cannot become a command.
+application; no second network path to the launcher's operations by any address, port or
+protocol — including an API-key door added for automation; and browser-supplied values
+quoted or filtered for every shell that will interpret them, so that a *directory name* or a *session name* cannot become a command.
 
 **Does not defend against:** anyone holding a valid identity. They have a shell on your
 machines. That is what you built.

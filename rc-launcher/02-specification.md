@@ -28,7 +28,7 @@ Terms used throughout:
 | `address` | Where the remote-execution service answers |
 | `account` | The identity the launcher uses on that machine |
 | `credential reference` | From configuration; see §2.7 |
-| `tool locations` | Absolute locations for the driving tool and the multiplexer; see §10.2 |
+| `tool locations` | Absolute locations for the driving tool and the multiplexer, or a search path that contains them; see §10.2 |
 
 **1.1.1** Target machines MUST be configured. The set of machines MUST NOT be
 discoverable or extendable by a client request. *A caller who can add a machine can
@@ -78,7 +78,8 @@ application. *A route protected by remembering to protect it is a route that wil
 day be added without the decoration, and nothing will fail.*
 
 **2.6** Where **2.5** is used, the deployment MUST NOT expose any network path that
-reaches the application without traversing that component. This includes a second
+reaches the application without traversing that component, other than a door that
+meets every condition of §2.9. This includes a second
 listener, a directly published port, a node-level or host-level port, an internal
 service address, and any debugging or metrics endpoint. *A single such path makes every
 other requirement in this section decorative, and it does so silently — the guarded path
@@ -94,12 +95,34 @@ MUST verify identity on the upgrade request itself, and MUST refuse before openi
 connection to a target machine. *An unauthenticated terminal transport is a shell; it is
 also the route most often forgotten, because it is not a page and it is not an API call.*
 
+**2.9** A deployment may want a second door for non-interactive clients — automation
+holding an API key, say — that cannot pass the browser sign-in that guards everything
+else. Where such a door exists:
+
+- it MUST authenticate in the application, and fail closed as **2.3** requires;
+- it MUST be confined to a path prefix that the authenticating component of **2.5** is
+  configured to pass through, and nothing else may be;
+- launching, terminating, listing directories and the terminal transport MUST NOT be
+  reachable through it, by any route;
+- the set of operations it does expose MUST be declared in one place, and a test MUST
+  compare that declaration against the routes actually mounted on the door.
+
+*Every operation behind that door inherits whatever is wrong with its key check. A
+read-only status check can survive that; a route that runs a free-text command on a
+machine cannot. A permitted set spread across per-route decorations is the case where somebody
+adds the launch route with the wrong flag and nothing fails.*
+
 ---
 
 ## 3. Launching a session
 
-**3.1** A launch takes a target machine, a working directory, and a command. It MUST
-produce a session in the multiplexer on that machine.
+**3.1** A launch takes a target machine and a working directory, and optionally a command
+and a session name. It MUST produce a session in the multiplexer on that machine. A
+launch with no working directory MUST be refused.
+
+**3.1.1** When no command is supplied, the launcher MUST use a default command taken from
+configuration (§9). *The flags the driving tool wants change more often than the
+launcher does; a default compiled into the code turns a flag change into a release.*
 
 **3.2** The session MUST survive the connection that created it, and MUST survive the
 request that created it. Querying the machine over a new, independent connection after
@@ -141,6 +164,11 @@ terminate.
 
 **3.11** A launch against an unreachable machine MUST fail with a message naming the
 machine, and MUST leave no partially created session.
+
+**3.12** A launch whose session name is already in use on that machine MUST be refused
+as a conflict, distinguishable from other failures. It MUST NOT attach to, replace or
+send input to the existing session. *Typing a command into somebody else's running
+session is the worst available interpretation of "launch".*
 
 ---
 
@@ -200,34 +228,61 @@ launcher is wrong for at least one machine.*
 **5.3** The list MUST be filterable by typing. *A machine with ninety entries and a
 machine with four are both normal, and an unfiltered list is unusable at the first.*
 
-**5.4** The operator MUST be able to launch in a directory that is not in the list.
+**5.4** The launch operation MUST accept a directory that is not in the list. The
+interface SHOULD offer a way to enter one. *Where the driving tool refuses untrusted
+directories, a launch elsewhere fails — but it fails at a live prompt, where trusting
+the directory is one command away, which is §3.5 working as intended.*
 
 **5.5** The most recently used directory MAY be remembered and pre-selected. If it is,
 it MUST be remembered **per target machine**. *A path on one machine is meaningless on
 another, and pre-filling it pre-fills a failed launch.*
 
-**5.6** The most recently used command MAY be remembered globally.
+**5.6** The most recently used command MAY be remembered globally. If it is, a command
+equal to the configured default MUST NOT be stored, and any stored value MUST be
+cleared when the operator returns the box to the default. *A remembered copy of the
+default shadows it for good: a later change to the configured default deploys correctly
+and never appears in the box.*
+
+**5.7** The session name MUST NOT be remembered between launches. *It identifies one
+session; reusing it either collides (§3.12) or produces two sessions that look identical
+in the vendor's app.*
 
 ---
 
 ## 6. Naming
 
-**6.1** A single generated identifier MUST serve both the multiplexer session and the
-driving tool's own session label, so that the name shown by the vendor's interface and
-the name shown by the multiplexer are the same string. *Two identifiers for one thing
-is a reconciliation problem nobody asked for.*
+**6.1** A single identifier MUST serve both the multiplexer session and the driving
+tool's own session label, so that the name shown by the vendor's interface and the name
+shown by the multiplexer are the same string. *Two identifiers for one thing is a
+reconciliation problem nobody asked for.*
 
-**6.2** The name MUST be derived from the working directory, so it is recognisable, plus
-a disambiguator, so two launches from the same directory do not collide.
+**6.2** When the operator does not supply a name, the launcher MUST generate one from
+the working directory, so it is recognisable, plus a disambiguator, so that launches
+from the same directory do not ordinarily collide. Where they do, §3.12 applies.
 
 **6.3** The name MUST NOT contain any character the multiplexer treats as structural —
 separators for sessions, windows or panes. *Such a session is created successfully and
 can then never be attached to or killed, because every command that targets it parses
 the name instead.*
 
-**6.4** The name MUST be generated by the launcher. The API MUST NOT accept a
-caller-supplied name. *An optional field that reaches a shell is attack surface with no
-user; delete it rather than sanitise it.*
+**6.4** The operator MAY supply a name. *A session called `fix-the-footer` is findable in
+the vendor's app; another `blueprints-1432` is not.* If the API accepts one:
+
+- it MUST pass through the **same** filter as a generated name, reduced to an explicit
+  allow-list of characters, before it reaches any shell — not a deny-list of
+  metacharacters, and not a second, separate filter;
+- it MUST be bounded in length;
+- a name that filters away to nothing MUST fall back to a generated name, not fail.
+
+*This field has been removed once already for reaching the multiplexer's inner shell
+unfiltered — where a command substitution in it ran on the target machine. It is
+permitted only because every name, supplied or generated, now goes through one filter.
+A name field that has its own sanitiser is two fields' worth of attack surface.*
+
+**6.5** The launcher MUST add the name argument to the driving tool's command itself. A
+command that already sets that argument MUST be refused. *Otherwise the multiplexer has
+one identity and the vendor's app another, which is §6.1 broken by the operator rather
+than the code — and silently picking a winner hides it.*
 
 ---
 
@@ -281,7 +336,8 @@ machine. *A value escaped once, for the outer transport, is still expanded by th
 shell — so a directory name can become a command substitution that runs on the machine.*
 
 **8.4** The API MUST NOT accept fields the interface does not send. Unused optional
-input that reaches a shell MUST be removed rather than sanitised.
+input that reaches a shell MUST be removed rather than sanitised. A field the interface
+does send, and that reaches a shell, MUST be held to §6.4 or §8.2.
 
 ---
 
@@ -293,6 +349,9 @@ Minimum surface:
 |---|---|---|
 | Target machines | yes | Label, address, account, per-machine tool locations (§10.2) |
 | Remote credential | yes | MUST accept a file reference so it can be mounted rather than embedded |
+| Host keys | no | Per target machine; §10.6 |
+| Default command | no | §3.1.1; the launcher MAY ship a fallback, but configuration wins |
+| Mode | no | Live or simulated; §9.2 |
 | Public URL | yes | Used to build absolute URLs; see §10.4 |
 | Reachability probe timeout | no | §7.2 |
 | Connection timeout | no | §7.2 |
@@ -302,17 +361,33 @@ Minimum surface:
 **9.1** Configuration MUST be validated at startup, not at point of use. A machine entry
 missing an address or a tool location MUST prevent the service from starting.
 
-**9.2** Where a simulated or offline mode exists for development, it MUST be disabled by
-default, MUST be evident in the interface whenever it is active, and MUST NOT be
-selectable per request by a client. *A mode the client can ask for is a mode an attacker
-can ask for; a mode that is not visible is a mode you will demonstrate by accident.*
+**9.2** Where a simulated mode exists — one in which nothing leaves the process — it
+MUST be chosen by configuration only, and MUST NOT be selectable per request by a client.
+Every page MUST say which mode is active, in both modes. *A mode the client can ask for
+is a mode an attacker can ask for; a mode that is not visible is a mode you will
+demonstrate by accident.*
+
+**9.2.1** Where there is a default, it SHOULD be the simulated mode. *A deployment that
+forgets the setting then cannot run anything on anything, which is a failure you notice
+from the banner in the first second. The opposite default fails live.*
+
+**9.2.2** In simulated mode every operation MUST work end to end — listing, directories,
+launch, terminate and attach. An operation the simulation cannot reach is a defect, not
+a gap. *If the simulation does not recognise the command behind one endpoint, the core
+flow cannot be exercised or demonstrated without a real machine, and the simulation
+stops being evidence of anything.*
+
+**9.2.3** The live and simulated implementations of each remote operation MUST be kept
+in step by a test that compares their names and signatures. *Without it the two drift,
+and the simulated suite keeps passing against an interface the live one no longer has.*
 
 ---
 
 ## 10. Deployment
 
-**10.1** There MUST be exactly one network path to the launcher, and it MUST pass
-through the authenticating component (§2.5, §2.6).
+**10.1** There MUST be exactly one network path to the launcher's operations, and it
+MUST pass through the authenticating component (§2.5, §2.6). A second door permitted by
+§2.9 is not a path to them, and MUST be shown not to be.
 
 **10.2** The launcher MUST NOT assume that a non-interactive remote login has the driving
 tool or the multiplexer on its command search path. Every remote invocation MUST use a
@@ -346,3 +421,9 @@ it will be rejected as unregistered.*
 **10.5** The launcher MUST run with the least privilege that lets it hold the remote
 credential, and that credential SHOULD grant only the access the launcher needs on each
 target machine.
+
+**10.6** The launcher SHOULD verify each target machine's host key against a value from
+configuration, and refuse to connect when it does not match. *Whatever answers for a
+machine's name receives the launcher's credential and then a command to run. Accepting
+any host key hands both to anyone who can answer for that name — a poisoned name lookup
+or a reassigned address is enough.*
