@@ -25,6 +25,7 @@ Each one contains:
 | [tokenbin](tokenbin/) | An approval-gated credential store. Every secret has a permanent URL that returns `401` until its owner opens a short window |
 | [infra-dashboard](infra-dashboard/) | A state and power dashboard for physical machines. One state per machine from three signals — reachability, power, cluster membership — and safe stop and start, including machines sharing one plug |
 | [rc-launcher](rc-launcher/) | A launcher for long-lived remote CLI sessions. Start an interactive session on one of your machines from a phone, and pick it up later in the vendor's app |
+| [forgejo-vm-runner](forgejo-vm-runner/) | A fresh VM for every Forgejo Actions job, on your own hosts. A scaler per host clones a golden image for each waiting job and deletes it after; hosts sharing a label coordinate through the CI service's own runner list |
 
 ## Using one
 
